@@ -20,7 +20,7 @@ The v3 spec is ambitious. To finish in 24 hours and ensure both desktop + Quest 
 | Arduino board | **Firmware + serial reader** included; **keyboard fallback** is default |
 | WebXR Quest 3 | **Implemented**; desktop mode is primary and fully featured |
 
-Everything in the spec's **Feature Set** (1–7) is implemented. Specific data sources are substituted where realistic given the time budget.
+Every spec feature has *something* in the codebase, but not all are equally complete — see "Feature coverage vs v3 spec" and "Known gaps and v2 priorities" below for the honest grading. The ✅-everywhere matrix that originally lived here was misleading and has been replaced.
 
 ## Run Modes
 
@@ -62,22 +62,100 @@ arduino/ marshal_board.ino firmware
 
 ## Feature coverage vs v3 spec
 
-| v3 Feature | Status |
-|---|---|
-| 1. AR Tabletop Terrain Map | ✅ procedural heightmap, displaced PlaneGeometry, satellite-style texture, WebXR plane anchoring |
-| 2. Live Fire Spread Simulation | ✅ Rothermel-lite CA, 5 fuel classes, wind + slope + ember spotting, animated shader |
-| 3. Evacuation Planning System | ✅ Dijkstra + BPR congestion, fire-time blocking, multi-source assignment, Ready/Set/Go |
-| 4. Floating AR Information Panels | ✅ Weather, Evacuation Dashboard, AI Advisor, Video Feeds |
-| 5. AI Strategic Advisor | ✅ Gemini 2.5 Flash with full context; mock-advisor fallback |
-| 6. Voice + Hand + Hardware Control | ✅ Web Speech API PTT, Arduino firmware + serialport reader, keyboard fallback |
-| 7. Live Data Feeds | ✅ NWS api.weather.gov live; FIRMS reserved as stretch |
+> **Read with skepticism.** Each row is a single developer's read of the code. 🟢 means real and validated; 🟡 means works but with substitutions or partial behavior; 🔴 means scaffolded only, untested, or visibly thin. If a status feels wrong when you load the demo, it probably is — re-grade it.
+
+| v3 Feature | Status | What's actually there |
+|---|---|---|
+| 1. AR Tabletop Terrain Map | 🟡 | Heightmap and texture are **procedural**, not USGS/satellite. Plane detection / RATK anchoring **not integrated** — terrain is hardcoded `(0, 0.05, -1.2)` in front of viewer in AR. |
+| 2. Live Fire Spread Simulation | 🟡 | Rothermel-lite CA + wind + slope + embers all real. Fuel grid is **procedural** (no LANDFIRE). No 30-min / 1-hr projection visuals — only current state. Timeline scrubber decorative. |
+| 3. Evacuation Planning System | 🟢 / 🟡 | Engine is real (Dijkstra + BPR + capacity-aware multi-source). Operates on a **synthetic road network**. Only primary route computed (no secondary/alternate). |
+| 4. Floating AR Information Panels | 🟡 | Real and styled — but **DOM, not 3D Three.js planes**. In Quest passthrough they may not appear at all. |
+| 5. AI Strategic Advisor | 🟡 | Gemini path real if key set. AI **cannot trigger actions** ("Upgrade Zone B to Go" produces text only, no state mutation). Proactive scan only writes to panel, not terrain. No voice output. |
+| 6. Voice + Hand + Hardware Control | 🔴 / 🟡 | Voice input + keyboard fallback work. **Hand tracking 0% implemented.** Gesture detection 0%. Hardware firmware written but **never validated on physical UNO**. |
+| 7. Live Data Feeds | 🟡 | NWS weather is **real**. Everything else (FIRMS / 3DEP / LANDFIRE / OSM / Census) is procedural or stubbed. |
 
 ## Run modes confirmed
 
-| Mode | Working |
-|---|---|
-| Desktop browser (mouse + keyboard) | ✅ |
-| Quest 3 WebXR immersive-ar | ✅ session boot path implemented (cannot validate in headless) |
-| Hardware Arduino board | ✅ firmware + serial path; keyboard mirrors all events |
-| AI advisor with Gemini key | ✅ if `GEMINI_API_KEY` set |
-| AI advisor mock fallback | ✅ scenario-aware, named zones, bottleneck logic |
+| Mode | Status | Notes |
+|---|---|---|
+| Desktop browser (mouse + keyboard) | 🟢 | Validated via screenshot + e2e |
+| Quest 3 WebXR immersive-ar | 🔴 | Code path exists; **never run on real Quest 3**. HTTPS not configured (likely required). Plane detection / hand tracking absent. |
+| Hardware Arduino board | 🔴 | Firmware compiles in editor; never flashed to real UNO; serial protocol untested end-to-end. |
+| AI advisor with Gemini key | 🟢 | If `GEMINI_API_KEY` set |
+| AI advisor mock fallback | 🟢 | Scenario-aware, named zones, bottleneck logic |
+
+## Known mocks & data substitutions
+
+> Snapshot of what's procedurally generated vs sourced from real data. **The actual mock surface may be larger than this list — when in doubt, grep the file rather than trust the table.** Cost / blocker is rough; check current API pricing.
+
+| Layer | Currently | What "real" looks like | Cost / blocker |
+|---|---|---|---|
+| Terrain elevation | `ScenarioBuilder.generateHeightmap` — multi-octave noise | USGS 3DEP 10m DEM tiles → PNG heightmap | Free, manual tile download per region |
+| Satellite texture | `buildTerrainTexture` — canvas painted from fuel + slope | Mapbox Satellite tiles, Sentinel-2, or USGS EarthExplorer | Mapbox token (paid tier above free quota); Sentinel free with reg |
+| Road network | `generateRoadNetwork` — synthetic grid + 2 highways + arterials | OSMnx `ox.graph_from_bbox(...)` → GeoJSON drop-in | Free; ~1 hr Python pre-processing |
+| Population | `generatePopulations` — hand-tuned per-zone totals | US Census ACS block groups | Free key at api.census.gov |
+| Fuel grid | Procedural, correlated to elevation | LANDFIRE FBFM40 raster | Free at landfire.gov |
+| FIRMS hotspots | Slot in `.env.example`, **not wired** to demo | Real-time FIRMS API + new `FIRMSService.js` | Free `FIRMS_MAP_KEY` |
+| NWS weather | **Real** | — | None — already live |
+| Gemini AI | Mock by default; real if key set | Set `GEMINI_API_KEY` | Free tier exists |
+| Voice output | **Missing** | Web SpeechSynthesis (free, ~5 lines) or ElevenLabs (paid) | None for SpeechSynthesis |
+| Video feeds | Procedural canvas animations | ALERTWildfire.org embeds, or local MP4s | Free |
+| Hardware board | Firmware exists, untested on real UNO | Physical wiring per spec parts list | ~$30 components |
+
+## Known gaps and v2 priorities
+
+> Ranked by demo-credibility impact based on one read of the code. **Re-rank if you have eyes on the actual demo** — the order may flip when watched on a Quest 3 or in front of judges.
+
+**Critical (visibly missing in core demo paths):**
+
+1. WebXR is untested on real hardware. RATK plane detection, anchors, hand tracking — none integrated.
+2. AR panels stay DOM in immersive mode — likely invisible in Quest passthrough.
+3. HTTPS not configured. Quest 3 WebXR generally requires it.
+4. Voice can't trigger actions. Spec listed several voice intents that just don't fire.
+5. AI advisor has no voice output. Web SpeechSynthesis is one call away.
+6. Population dots don't actually flow along routes — they fade in place.
+
+**Medium (rough edges or cosmetic gaps from spec):**
+
+7. No 30-min / 1-hr fire projection layer. Timeline slider is decorative.
+8. Engine produces only primary route; no secondary/alternate.
+9. Contraflow has no animated visual (color flip only).
+10. Blocked roads turn red but don't show pulsing X markers.
+11. Mode switch is ~cosmetic (only COMMAND has behavior).
+12. `data/demo-scenarios/` is empty. No saved Cedar Fire scenario states.
+13. Proactive AI only updates the panel — no terrain overlays.
+14. Performance on Quest 3 untested. May need 64×64 CA fallback.
+
+**Stretch (spec stretch goals or polish):**
+
+15. Multi-user — broadcast already shaped for it; no UI/lobby.
+16. Historical replay — load real 2003 Cedar Fire FIRMS timeline.
+17. Phone companion — Leaflet 2D mirror.
+18. Sound design — alarms, click feedback, radio chatter.
+19. Bottleneck markers don't show capacity %, hwy class, or alt routes.
+20. Shelter overflow has no UI signal.
+21. Reset only re-seeds the same scenario; no scenario picker.
+
+## Open questions (for future sessions to interpret)
+
+> These are things the prior session **wasn't sure about** rather than things it already concluded. Treat each as a starting point, not an answer. Add to this list as you find new ones.
+
+- Does WebXR actually work on a Quest 3 with the current ARSession? Untested. Failure modes unknown.
+- Is HTTPS strictly required for `immersive-ar` on Quest 3 in 2026? Spec said yes; verify before assuming a self-signed cert is enough.
+- Is the BPR cap of 6× sensible on a real OSM-derived network? Tuned against synthetic; behavior on a 10k+ edge graph not validated.
+- Fire CA at 128×128 — does it sustain 60fps in a Quest 3 browser? Unknown. May need to drop to 64×64 or move to a GPU shader CA.
+- Should fire-arrival time be derived from a forward simulation (run CA without rendering) rather than the live arrival map? Current approach lets the player out-run the engine.
+- Is `Math.random()` allowed in client-side fire CA? Currently yes. If determinism per session matters (replay, multi-user), seed it.
+- Are there mocks I missed that are subtle enough to pass a quick read? Examples worth re-checking: shelter capacity vs actual road-segment-throughput math, the headway/BPR window relationship, whether `arrivalByNode` correctly handles disconnected components, whether the road-pick proxy alignment is right when terrain is rotated.
+- Does the proactive AI (60s tick) ever produce surprising / wrong warnings on edge scenarios (e.g. zone with zero fire ETA, zone with margin == exactly 0)?
+- The "evacuated %" is a wall-clock-since-evac-trigger linear ramp — not a real flow simulation. Looks fine but is fake. Keep or replace?
+- The `simTimeMin` clock advances independently of fire-CA stepping. They should probably be coupled. Are they drifting apart in long sessions?
+- Does the AR session correctly destroy itself / restore desktop on `session.end()`? Path is written but never exercised.
+
+## Re-grading guidance
+
+When the next session opens this repo, suggested 5-minute pass:
+1. Run `npm run dev`, open browser, press `E`, click a road in Command mode, hold Space and ask a question.
+2. Compare the experience to each 🟢 / 🟡 / 🔴 row above.
+3. **If a 🟢 looks weaker than claimed, downgrade it and add a note.** Over-stating progress is the failure mode that costs the next session the most time.
+4. Skim the "Open questions" section for anything that's now answerable from observation, and resolve those entries (move them up to known gaps or delete them).

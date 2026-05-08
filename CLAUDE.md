@@ -5,7 +5,7 @@ AR fire-marshal command center for Reboot the Earth 2026 (UCSD). Runs on desktop
 ## References
 
 - @marshal-management-v3.md — original v3 spec (vision, full architecture, demo script). Authoritative for "what this should be."
-- @BUILD_LOG.md — scope decisions, hackathon-realism substitutions, feature-coverage matrix, verification log. Authoritative for "what is actually built."
+- @BUILD_LOG.md — scope decisions, feature grading (🟢/🟡/🔴), known mocks, prioritized gaps, and **open questions for future sessions to interpret**. Authoritative for "what is actually built." Treat the grading as one developer's snapshot — re-grade rows as you observe behavior.
 
 ## Folder structure
 
