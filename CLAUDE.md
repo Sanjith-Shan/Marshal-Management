@@ -68,7 +68,7 @@ Arduino: the existing `arduino/marshal_board/marshal_board.ino` targets **classi
 - **Renderers (client):** every visual layer is a class with a `.group` (THREE.Group) added to `SceneRoot.terrainGroup`, an `applySnapshot(snap)` method, and an optional `update(dt)` for per-frame animation. Follow this when adding new layers.
 - **Grid coordinates:** scenario uses cell coords (`gx`, `gz` in `0..gridSize`). Convert to scene units with `terrain.gridToWorld(gx, gz, hOffset)`. Never bake world coords into scenario data.
 - **Determinism:** scenario generation is seeded via `mulberry32(scenario.seed)`. Don't introduce `Math.random()` into `ScenarioBuilder.js` or downstream pre-compute paths — keeps demos reproducible.
-- **Hardware ↔ keyboard parity:** every Arduino event in `ArduinoService.js` emits the same `{ type, payload }` shape that `Keybindings.js` emits. If you add a new control, wire both paths.
+- **Hardware ↔ keyboard ↔ HUD parity:** every Arduino event in `ArduinoService.js`, every key in `Keybindings.js`, and every relevant HUD button in `HUD.js` / `index.html` emit the same `{ type, payload }` shape. If you add a new control, wire all three paths. The `time-jump` action (added 2026-05-08 for TODO group H1) is the canonical three-way example.
 - **Naming:** PascalCase classes/files for renderers and services; camelCase for fields/functions; sim time is always **minutes** (`simTimeMin`, `etaMin`, `evacMin`).
 - **No new comments unless non-obvious.** Existing module headers explain why each file exists; one-line "what" comments are avoided.
 - **Tests:** prefer extending `_selftest.js` (pure logic) or `_e2e.js` (socket flow) over adding a new framework. Both must end with `PASSED`.

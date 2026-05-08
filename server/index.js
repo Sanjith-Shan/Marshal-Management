@@ -219,6 +219,7 @@ setInterval(() => state.tickSimulation(), 1000);
 weather.start();
 weather.on('update', (w) => state.updateWeather(w));
 
+// RESUME HERE: couple proactive AI to time-jump — when handleAction('time-jump') advances simTimeMin by ≥ 30, await ai.proactiveScan() and pushAdvisorMessage immediately so the advisor doesn't lag the sim clock by up to one wall-clock minute (BUILD_LOG 2026-05-08, "Next session: pick up here" item 1).
 // Proactive AI: every 60 sec analyze the scene
 setInterval(async () => {
   if (!state.aiProactiveEnabled) return;

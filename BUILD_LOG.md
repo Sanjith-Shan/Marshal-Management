@@ -23,6 +23,37 @@
 
 **Still open:** H1 sub-question on AI proactive cadence vs sim-jump (the proactive scan still ticks on 60 s wall-clock; if simTimeMin jumps an hour ahead the advisor will be stale until the next wall-clock minute). H4/H5/H6.
 
+### Broken / incomplete after this session
+
+- **Rewind in the first 5 sim-minutes** surfaces an advisor warning and no-ops. The first server snapshot is pushed at simTimeMin = 5 (via `tickSimulation` in `server/services/StateManager.js`). Demo'd in `_e2e.js`; user-visible message reads "Cannot rewind: no snapshots yet…". Acceptable for now but a rough edge.
+- **AI proactive scan does not re-fire on time-jump.** `setInterval(60_000)` in `server/index.js:166-170` is wall-clock. After a +60 min forward jump the advisor lags up to a wall-clock minute. Cheap fix: when `time-jump` advances by ≥ 30 sim-min, call `ai.proactiveScan()` immediately and push the result.
+- **Hardware "hold = ±60" not implemented.** Classic-UNO firmware emits a single edge-trigger ±30 per press; for ±60 you press twice. Keyboard `Shift` modifier covers it. Real fix is host-side timing in `server/services/ArduinoService.js` (track press duration, fire a 2nd event after ~800 ms held).
+- **Client CA snapshot ring is not pre-populated for late-joining sockets.** The `_maybeSnapCA` push in `client/src/main.js:97-105` only triggers on incoming `tick` events. A client that joins mid-session can rewind only as far back as the first `tick` it received, not as far back as the server's ring. Server `time-rewind` falls back to rebuilding a fresh CA on miss — visually the fire disappears.
+- **Timeline scrubber (T) is still cosmetic.** Time-jump replaces its *role*, but the slider in `client/index.html:82-86` still emits the decorative `timeline` action. Either repurpose as a "preview without commit" tool or hide it.
+- **H4 / H5 / H6 (UNO Q wireless migration) not started.** Classic-UNO USB serial path is the only working hardware path. Firmware was updated for the new pins so it stays current; no parallel `arduino/marshal_board_q/` yet.
+
+### Next session: pick up here
+
+Ranked by demo-credibility-per-effort, all desktop-testable, all XR-safe:
+
+1. **Trigger `ai.proactiveScan()` from the time-jump handler when |deltaMin| ≥ 30** — `server/index.js`. ~10 lines. Removes the visible "advisor stale after jump" lag. RESUME HERE marker is parked at this exact line.
+2. **Voice output for advisor messages** (Critical gap #5). Web SpeechSynthesis, ~5 lines in `client/src/panels/AIAdvisorPanel.js` (or wherever new advisor messages are appended). Speak only the latest non-system message; respect a mute toggle on the panel.
+3. **AI can mutate state** (Critical gap #4). Detect intents like "Upgrade Zone B to Go", "Block SR-67", "Enable contraflow on Poway Rd" in `server/services/AIAdvisor.js` and emit the matching action. Most actions already exist (`override-zone`, `block-road`, `contraflow`); just needs a parser layer.
+4. **Population dots actually flow along routes** (Critical gap #6). `client/src/evacuation/PopulationDots.js` currently fades them in place; animating along `zone.route.edgeIds` is real demo polish.
+5. **Hardware hold = ±60 min** in `server/services/ArduinoService.js` — only worth doing once the board is flashed and connected.
+
+Stop and ask before starting AR work (HTTPS / RATK / 3D panels) — that's a multi-session block of its own and needs a Quest 3 in hand to validate.
+
+### Gotchas / context for future-me
+
+- **The `time-jump:applied` ack is load-bearing.** The server doesn't re-run evac when a regular `fire:state` arrives — only when `time-jump:applied` arrives or a manual action triggers it. If you remove the explicit ack and try to piggy-back on `fire:state`, evac silently stops re-running after forward jumps.
+- **Server and client snapshot rings are independent and not transactional.** They both push at the same 5-min sim cadence (server pushes from `tickSimulation`, client pushes from the broadcast `tick` event). They drift out of sync if the socket stalls or if the client connects late. The rewind path tolerates a client miss (rebuild CA) and a server miss (warn + no-op); don't add an assertion that requires them to match.
+- **`fastForward(n)` does NOT call `setWind` / weather updates.** Weather stays whatever the last `WeatherService` poll returned, even if you forward-jump 60 min. Acceptable for short jumps; if you ever push the jump amount to 2 hr, weather divergence will get noticeable.
+- **CA RNG is `Math.random()` and intentionally unseeded.** This is why H3 went with a snapshot ring instead of re-sim. Don't introduce determinism casually — it'll be a real refactor (every CA spread roll, every ember roll, every burnout-time lookup needs a seeded source). Wait for stretch goal #15 (multi-user) to motivate it.
+- **`pushAdvisorMessage` is the single hub for advisor output.** New status messages from the time-jump handler go through it (see `server/index.js:155-159, 184-186`). If you wire voice output, attach it at the panel's `appendAdvisor` handler in `client/src/main.js:89` — that's where every advisor entry lands, regardless of source (proactive AI, system, user-asked, time-jump).
+- **The CA's `_stepOnce` mutates `this.state` in place at the end via `this.state = next`.** `snapshot()` clones `state` before returning, but if you ever call `snapshot()` mid-step (you won't — JS is single-threaded — but if you ever go async-step), you'll get torn state. Keep `_stepOnce` synchronous.
+- **A new control should be wired in three places, not two.** `CLAUDE.md` previously said hardware ↔ keyboard parity; the new convention is hardware ↔ keyboard ↔ HUD parity. The `time-jump` action is the canonical example.
+
 ## Scope Decisions (Hackathon-Realism)
 
 The v3 spec is ambitious. To finish in 24 hours and ensure both desktop + Quest 3 work, the following adjustments are made:
