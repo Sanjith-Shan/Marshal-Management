@@ -1,0 +1,234 @@
+// AIAdvisor — Gemini 2.5 Flash if GEMINI_API_KEY is set, otherwise a
+// rules-based mock that uses the same context format and returns equally
+// useful, scenario-aware responses.
+
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const SYSTEM = `You are the AI Strategic Advisor for a fire-marshal AR command system.
+You see the full state: fire, weather, terrain, road network, populations,
+zones, evacuation routes, bottlenecks, shelter capacity. Respond in 2–4
+short sentences. Be specific: name zones, roads, percentages, time
+windows. If a critical risk exists (declining safety margin, blocked
+evacuation route, shelter near capacity), lead with a single one-line
+WARNING. Otherwise lead with a recommendation. Never fabricate data; only
+reason from the context provided. Skip pleasantries.`;
+
+export class AIAdvisor {
+  constructor(state, weather) {
+    this.state = state;
+    this.weather = weather;
+    this.client = null;
+    this.model = null;
+    this.history = [];
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        this.client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        this.model = this.client.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          systemInstruction: SYSTEM
+        });
+      } catch (err) {
+        console.warn('[ai] gemini init failed:', err.message);
+      }
+    }
+  }
+
+  backendName() {
+    return this.model ? 'gemini-2.5-flash' : 'mock-advisor';
+  }
+
+  buildContext() {
+    const s = this.state;
+    const lines = [];
+    lines.push(`Sim time: ${s.simTimeMin.toFixed(1)} min   Mode: ${s.mode}`);
+    lines.push(`Weather: wind ${Math.round(s.weather.windKph)} kph from ${Math.round(s.weather.windDeg)}°, gusts ${Math.round(s.weather.gustKph)} kph, RH ${Math.round(s.weather.humidity)}%, ${s.weather.redFlag ? 'RED FLAG' : 'no flag'}`);
+    lines.push(`Fire: ${s.fire.burningCells} burning cells, ${s.fire.burnedCells} burned, perimeter ${s.fire.perimeterCells}`);
+    lines.push(``);
+    lines.push(`ZONES:`);
+    for (const z of s.evacuation.zones) {
+      const lvl = z.level === 3 ? 'L3 GO' : z.level === 2 ? 'L2 SET' : 'L1 READY';
+      const pop = s.scenario.populations
+        .filter(p => p.zone === z.name)
+        .reduce((a, p) => a + p.count, 0);
+      lines.push(`- ${z.name}: ${lvl}  pop ${pop}  fire ETA ${z.etaMin}m  evac time ${z.evacMin}m  margin ${z.marginMin}m  evacuated ${z.evacuatedPct || 0}%`);
+      if (z.bottleneck) lines.push(`    BOTTLENECK on edge ${z.bottleneck.edgeId} at ${z.bottleneck.ratio}% capacity`);
+      if (z.route) {
+        const dests = z.route.destinations.map(d => `${d.name}(${d.count})`).join(', ');
+        lines.push(`    routing to: ${dests}`);
+      }
+    }
+    lines.push(``);
+    lines.push(`SHELTERS:`);
+    const shelterUsage = (s.evacuation.lastRunAt ? this._shelterUsage() : []);
+    for (const sh of s.scenario.shelters) {
+      const u = shelterUsage.find(x => x.nodeId === sh.nodeId);
+      lines.push(`- ${sh.name}: ${u ? u.used : 0}/${sh.capacity}`);
+    }
+    lines.push(``);
+    lines.push(`ROAD STATUS:`);
+    const blocked = s.scenario.edges.filter(e => e.blocked);
+    const contra = s.scenario.edges.filter(e => e.contra);
+    lines.push(`- ${blocked.length} blocked edges, ${contra.length} contraflow segments`);
+    if (s.evacuation.bottlenecks.length) {
+      const top = s.evacuation.bottlenecks.slice(0, 3)
+        .map(b => `edge ${b.edgeId} (${Math.round(b.ratio * 100)}% cap)`).join(', ');
+      lines.push(`- Top bottlenecks: ${top}`);
+    }
+    return lines.join('\n');
+  }
+
+  _shelterUsage() {
+    const used = new Map();
+    for (const z of this.state.evacuation.zones) {
+      if (!z.route) continue;
+      for (const d of z.route.destinations) {
+        used.set(d.name, (used.get(d.name) || 0) + d.count);
+      }
+    }
+    return this.state.scenario.shelters.map(s => ({
+      nodeId: s.nodeId, used: used.get(s.name) || 0
+    }));
+  }
+
+  async ask(prompt) {
+    const ctx = this.buildContext();
+    if (this.model) {
+      try {
+        const full = `CONTEXT:\n${ctx}\n\nMARSHAL: ${prompt}`;
+        const result = await this.model.generateContent(full);
+        const text = result.response.text().trim();
+        return {
+          severity: this._severity(text),
+          source: 'AI',
+          text,
+          prompt
+        };
+      } catch (err) {
+        console.warn('[ai] gemini failed, falling back:', err.message);
+      }
+    }
+    return this._mockReply(prompt, ctx);
+  }
+
+  async proactiveScan() {
+    const s = this.state;
+    // Auto-detect notable conditions and surface a warning.
+    const issues = [];
+    for (const z of s.evacuation.zones) {
+      if (z.level === 3 && (z.evacuatedPct || 0) < 50 && z.etaMin <= 30) {
+        issues.push({
+          severity: 'crit',
+          source: 'proactive',
+          text: `${z.name} is at LEVEL 3 GO with only ${z.evacuatedPct || 0}% evacuated and fire ETA ${z.etaMin} min. Consider contraflow on primary route.`
+        });
+      } else if (z.level === 2 && z.marginMin < 20 && z.marginMin >= 0) {
+        issues.push({
+          severity: 'warn',
+          source: 'proactive',
+          text: `${z.name} safety margin is ${z.marginMin} min — recommend upgrade to LEVEL 3 GO within 5 min.`
+        });
+      } else if (z.bottleneck && z.bottleneck.ratio > 100) {
+        issues.push({
+          severity: 'warn',
+          source: 'proactive',
+          text: `${z.name} primary route is over-capacity (${z.bottleneck.ratio}%). Suggest splitting flow to alternate.`
+        });
+      }
+    }
+    if (!issues.length) return null;
+    return issues.sort((a, b) => (b.severity === 'crit') - (a.severity === 'crit'))[0];
+  }
+
+  _severity(text) {
+    if (/WARN|critical|immediate|blocked|over[- ]?capacity/i.test(text)) return 'warn';
+    if (/danger|EVACUATE|GO NOW/i.test(text)) return 'crit';
+    return 'info';
+  }
+
+  _mockReply(prompt, ctx) {
+    const s = this.state;
+    const p = (prompt || '').toLowerCase();
+    const zones = s.evacuation.zones;
+    const goingZones = zones.filter(z => z.level === 3);
+    const setZones = zones.filter(z => z.level === 2);
+
+    if (/risk|biggest|priorit/.test(p)) {
+      const worst = zones.slice().sort((a, b) => (a.marginMin - b.marginMin))[0];
+      if (worst) {
+        return {
+          severity: worst.marginMin < 15 ? 'crit' : 'warn',
+          source: 'mock-advisor',
+          prompt,
+          text: `Highest risk: ${worst.name} — fire ETA ${worst.etaMin} min, evacuation needs ${worst.evacMin} min, safety margin only ${worst.marginMin} min. ${worst.bottleneck ? `Bottleneck at edge ${worst.bottleneck.edgeId} (${worst.bottleneck.ratio}% cap).` : 'Routes are clear but margin is thin.'} Recommend ${worst.level < 3 ? 'upgrading to LEVEL 3 GO' : 'opening contraflow on primary route'} within 10 min.`
+        };
+      }
+    }
+    if (/wind|weather/.test(p)) {
+      return {
+        severity: s.weather.redFlag ? 'warn' : 'info',
+        source: 'mock-advisor',
+        prompt,
+        text: `Wind ${Math.round(s.weather.windKph)} kph from ${Math.round(s.weather.windDeg)}°, gusts ${Math.round(s.weather.gustKph)} kph, RH ${Math.round(s.weather.humidity)}%. ${s.weather.redFlag ? 'RED FLAG conditions — fire spread will be aggressive.' : 'Conditions stable.'} Wind direction will push fire toward ${windTarget(s.weather.windDeg)}.`
+      };
+    }
+    if (/lose|without|i-?15|sr-?67|highway/.test(p)) {
+      return {
+        severity: 'warn',
+        source: 'mock-advisor',
+        prompt,
+        text: `If primary highway is lost: routing collapses to arterials, evacuation time increases by 35–60% and bottlenecks shift to surface streets. Recommend pre-positioning traffic units at the parallel arterial and considering contraflow on the secondary route.`
+      };
+    }
+    if (/bottleneck/.test(p)) {
+      const bn = s.evacuation.bottlenecks.slice(0, 3);
+      if (bn.length === 0) return { severity: 'info', source: 'mock-advisor', prompt, text: 'No bottlenecks active. Routing flow is within capacity bounds.' };
+      return {
+        severity: 'warn',
+        source: 'mock-advisor',
+        prompt,
+        text: `${bn.length} active bottlenecks. Worst: edge ${bn[0].edgeId} on ${bn[0].hwy} class road at ${Math.round(bn[0].ratio * 100)}% capacity. Contraflow on this segment would cut clearance time roughly in half.`
+      };
+    }
+    if (/upgrade|level|go|set|ready/.test(p)) {
+      const candidates = setZones.slice().sort((a, b) => a.marginMin - b.marginMin);
+      if (!candidates.length) return { severity: 'info', source: 'mock-advisor', prompt, text: `No zones currently at LEVEL 2 SET. ${goingZones.length} at LEVEL 3 GO and being routed.` };
+      return {
+        severity: 'warn',
+        source: 'mock-advisor',
+        prompt,
+        text: `Recommend upgrading ${candidates[0].name} to LEVEL 3 GO. Margin is ${candidates[0].marginMin} min and declining. Evacuation will need ${candidates[0].evacMin} min once triggered.`
+      };
+    }
+    if (/how many|population|people|residents/.test(p)) {
+      const total = s.evacuation.totalPopulation;
+      const evacuated = Math.round(zones.reduce((a, z) => a + (z.evacuatedPct || 0) / 100 *
+        s.scenario.populations.filter(pp => pp.zone === z.name).reduce((b, pp) => b + pp.count, 0), 0));
+      return {
+        severity: 'info',
+        source: 'mock-advisor',
+        prompt,
+        text: `${total.toLocaleString()} residents in active zones. ${evacuated.toLocaleString()} evacuated so far (${Math.round(evacuated / total * 100)}%). Largest remaining: ${zones.slice().sort((a, b) => (b.evacuatedPct || 0) - (a.evacuatedPct || 0)).reverse()[0]?.name || '—'}.`
+      };
+    }
+    // Generic
+    return {
+      severity: 'info',
+      source: 'mock-advisor',
+      prompt,
+      text: `Snapshot: ${zones.length} zones, ${goingZones.length} at LEVEL 3 GO, ${setZones.length} at LEVEL 2 SET. Wind ${Math.round(s.weather.windKph)} kph from ${Math.round(s.weather.windDeg)}°. ${s.evacuation.bottlenecks.length} active bottlenecks. Top priority: review ${zones.slice().sort((a, b) => a.marginMin - b.marginMin)[0]?.name || 'fire perimeter'}.`
+    };
+  }
+}
+
+function windTarget(deg) {
+  // Convert "from" direction to "toward" cardinal-ish
+  const to = (deg + 180) % 360;
+  if (to < 22.5 || to >= 337.5) return 'north';
+  if (to < 67.5) return 'northeast';
+  if (to < 112.5) return 'east';
+  if (to < 157.5) return 'southeast';
+  if (to < 202.5) return 'south';
+  if (to < 247.5) return 'southwest';
+  if (to < 292.5) return 'west';
+  return 'northwest';
+}
