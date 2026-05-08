@@ -45,6 +45,8 @@ class App {
     this.shelters = null;
     this.populations = null;
 
+    this._currentMode = 'MONITOR';
+
     this.panels = new PanelManager(this.socket);
     this.voice = new VoiceInput(this.socket);
     this.hud = new HUD(this.socket, this.panels);
@@ -126,7 +128,10 @@ class App {
       if (this.fireCA) this.fireCA.setWind(w.windDeg, w.windKph);
     });
 
-    this.socket.on('mode', (m) => this.hud.setMode(m));
+    this.socket.on('mode', (m) => {
+      this.hud.setMode(m);
+      this._onModeChange(m);
+    });
 
     this.socket.on('panels', (panels) => this.panels.applyVisibility(panels));
 
@@ -164,8 +169,40 @@ class App {
       document.getElementById('btn-xr').classList.remove('active');
     });
 
-    // Click on a road in COMMAND mode → toggle blocked
-    this.canvas.addEventListener('click', (e) => this._handleCanvasClick(e));
+    this.canvas.addEventListener('click', (ev) => this._handleCanvasClick(ev));
+    this.canvas.addEventListener('mousemove', (ev) => this._onCanvasHover(ev));
+  }
+
+  _onModeChange(mode) {
+    this._currentMode = mode;
+
+    // Cursor: crosshair signals "interaction available" in COMMAND mode.
+    const cursors = { MONITOR: 'default', COMMAND: 'crosshair', EVACUATE: 'default' };
+    this.canvas.style.cursor = cursors[mode] ?? 'default';
+
+    // Clear any road hover state when leaving COMMAND mode.
+    if (mode !== 'COMMAND' && this.roads) {
+      this.roads.setHover(null);
+    }
+
+    // EVACUATE: open the evac panel if it isn't already open.
+    if (mode === 'EVACUATE') {
+      const panState = this.snapshot?.panels;
+      if (panState && !panState.evacuation) {
+        this.socket.emit('action', { type: 'panel', payload: 'evacuation' });
+      }
+    }
+  }
+
+  _onCanvasHover(ev) {
+    if (this._currentMode !== 'COMMAND' || !this.roads || this.ar.active) return;
+    if (this.desktop.dragging) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    const hit = this.roads.pickEdge(this.scene.camera, x, y);
+    this.roads.setHover(hit);
+    this.canvas.style.cursor = hit !== null ? 'pointer' : 'crosshair';
   }
 
   _buildWorld() {
@@ -267,18 +304,20 @@ class App {
     }
   }
 
-  _handleCanvasClick(e) {
+  _handleCanvasClick(ev) {
+    // Suppress click if the pointer was dragging (camera rotation gesture).
+    if (this.desktop.hasDragged) return;
     if (!this.snapshot || this.snapshot.mode !== 'COMMAND') return;
     if (!this.roads) return;
     const rect = this.canvas.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     const hit = this.roads.pickEdge(this.scene.camera, x, y);
     if (hit !== null) {
-      const e0 = this.scenario.edges.find(ed => ed.id === hit);
+      const edge = this.scenario.edges.find(ed => ed.id === hit);
       this.socket.emit('action', {
         type: 'block-road',
-        payload: { edgeId: hit, blocked: !e0?.blocked }
+        payload: { edgeId: hit, blocked: !edge?.blocked }
       });
     }
   }

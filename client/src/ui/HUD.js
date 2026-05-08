@@ -47,6 +47,35 @@ export class HUD {
     });
 
     this.fireBadge = null;
+    this._modeToastTimer = null;
+    this._modeToast = this._buildModeToast();
+  }
+
+  _buildModeToast() {
+    const el = document.createElement('div');
+    el.id = 'mode-toast';
+    el.className = 'mode-toast hidden';
+    document.getElementById('hud').appendChild(el);
+    return el;
+  }
+
+  showModeToast(mode) {
+    const descriptions = {
+      MONITOR:  'Monitor Mode — observation only',
+      COMMAND:  'Command Mode — click roads to block · voice commands active',
+      EVACUATE: 'Evacuation Mode — routing panel open · press E to recompute'
+    };
+    const colors = {
+      MONITOR:  'var(--accent)',
+      COMMAND:  'var(--accent-warm)',
+      EVACUATE: 'var(--accent-hot)'
+    };
+    this._modeToast.textContent = descriptions[mode] || mode;
+    this._modeToast.style.borderColor = colors[mode] || 'var(--accent)';
+    this._modeToast.style.color = colors[mode] || 'var(--accent)';
+    this._modeToast.classList.remove('hidden');
+    clearTimeout(this._modeToastTimer);
+    this._modeToastTimer = setTimeout(() => this._modeToast.classList.add('hidden'), 2500);
   }
 
   setConnection(connected) {
@@ -66,6 +95,7 @@ export class HUD {
     this.modeLabel.style.color = mode === 'COMMAND' ? 'var(--accent-warm)'
                               : mode === 'EVACUATE' ? 'var(--accent-hot)'
                               : 'var(--accent)';
+    this.showModeToast(mode);
   }
 
   cycleMode() {

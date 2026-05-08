@@ -416,6 +416,30 @@ kbd {
   letter-spacing: 0.08em;
 }
 
+.mode-toast {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  background: var(--glass-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 7px 16px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+}
+.mode-toast.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-6px);
+  pointer-events: none;
+}
+
 #ptt-toast {
   position: absolute;
   top: 80px;

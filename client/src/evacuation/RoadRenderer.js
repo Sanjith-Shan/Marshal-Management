@@ -20,6 +20,9 @@ export class RoadRenderer {
     this._blockedXGroup.name = 'blocked-x';
     this.group.add(this._blockedXGroup);
     this._blockedXMap = new Map();   // edgeId -> THREE.Mesh (the X marker)
+    this._hoverEdgeId = null;
+    this._primarySet = new Set();
+    this._secondarySet = new Set();
   }
 
   _buildLines() {
@@ -140,15 +143,15 @@ export class RoadRenderer {
   }
 
   setRoutePrimary(edgeIds, secondaryEdgeIds = []) {
+    this._primarySet   = new Set(edgeIds);
+    this._secondarySet = new Set(secondaryEdgeIds);
     const colors = this.lines.geometry.attributes.color;
     const arr = colors.array;
     arr.set(this._origColors);
-    const primary   = new Set(edgeIds);
-    const secondary = new Set(secondaryEdgeIds);
     for (const [eid, meta] of this._edgeMeta) {
       let r, g, b;
-      if (primary.has(eid))        { r = 0.36; g = 0.93; b = 0.55; }  // bright green
-      else if (secondary.has(eid)) { r = 0.22; g = 0.68; b = 0.45; }  // dimmer green
+      if (this._primarySet.has(eid))        { r = 0.36; g = 0.93; b = 0.55; }
+      else if (this._secondarySet.has(eid)) { r = 0.22; g = 0.68; b = 0.45; }
       else continue;
       for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
         arr[v * 3 + 0] = r;
@@ -157,6 +160,55 @@ export class RoadRenderer {
       }
     }
     colors.needsUpdate = true;
+  }
+
+  // Hover highlight in COMMAND mode. Restores the previous hovered edge to
+  // whatever its logical state was (blocked, route, original).
+  setHover(edgeId) {
+    if (this._hoverEdgeId === edgeId) return;
+    const colors = this.lines.geometry.attributes.color;
+    const arr = colors.array;
+
+    // Restore previous hovered edge
+    if (this._hoverEdgeId !== null) {
+      this._writeEdgeColor(arr, this._hoverEdgeId, false);
+    }
+    this._hoverEdgeId = edgeId;
+
+    // Apply hover color to new edge
+    if (edgeId !== null) {
+      const meta = this._edgeMeta.get(edgeId);
+      if (meta) {
+        for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
+          arr[v * 3 + 0] = 1.0;
+          arr[v * 3 + 1] = 0.92;
+          arr[v * 3 + 2] = 0.35;   // warm yellow hover
+        }
+      }
+    }
+    colors.needsUpdate = true;
+  }
+
+  _writeEdgeColor(arr, edgeId, isHover) {
+    const meta = this._edgeMeta.get(edgeId);
+    if (!meta) return;
+    const e = this.scenario.edges.find(ed => ed.id === edgeId);
+    let r, g, b;
+    if (e?.blocked)                         { r = 1.0;  g = 0.25; b = 0.25; }
+    else if (e?.contra)                     { r = 0.45; g = 0.85; b = 1.0;  }
+    else if (this._primarySet.has(edgeId))  { r = 0.36; g = 0.93; b = 0.55; }
+    else if (this._secondarySet.has(edgeId)){ r = 0.22; g = 0.68; b = 0.45; }
+    else {
+      const ic = meta.startVertex * 3;
+      r = this._origColors[ic + 0];
+      g = this._origColors[ic + 1];
+      b = this._origColors[ic + 2];
+    }
+    for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
+      arr[v * 3 + 0] = r;
+      arr[v * 3 + 1] = g;
+      arr[v * 3 + 2] = b;
+    }
   }
 
   applyEdgeUpdate(u) {

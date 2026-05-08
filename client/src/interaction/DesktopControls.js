@@ -15,6 +15,7 @@ export class DesktopControls {
     this.center = new THREE.Vector3(0, 0, 0);
     this.dragging = false;
     this.last = { x: 0, y: 0 };
+    this._dragPixels = 0;
     this.keys = new Set();
     this.enabled = true;
 
@@ -30,12 +31,17 @@ export class DesktopControls {
 
   setEnabled(b) { this.enabled = b; }
 
+  // True if the last mousedown was followed by significant pointer movement
+  // before mouseup. Used by the canvas click handler to suppress accidental
+  // road-block triggers after a camera rotation gesture.
+  get hasDragged() { return this._dragPixels > 5; }
+
   _onDown(e) {
     if (!this.enabled) return;
     if (e.button !== 0) return;
-    // If user clicked an HUD/panel element, ignore.
     if (e.target !== this.canvas) return;
     this.dragging = true;
+    this._dragPixels = 0;
     this.last.x = e.clientX;
     this.last.y = e.clientY;
   }
@@ -46,6 +52,7 @@ export class DesktopControls {
     if (!this.dragging) return;
     const dx = e.clientX - this.last.x;
     const dy = e.clientY - this.last.y;
+    this._dragPixels += Math.hypot(dx, dy);
     this.last.x = e.clientX;
     this.last.y = e.clientY;
     this.azimuth -= dx * 0.005;
