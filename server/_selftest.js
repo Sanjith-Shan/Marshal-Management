@@ -105,6 +105,29 @@ function assert(cond, msg) {
   console.log('AI reply:', r.text.slice(0, 200));
   assert(r.text.length > 20, 'AI returned a non-trivial reply');
 
+  // ---- AI intent parsing (Critical gap #4) ----
+  const intentPoway = ai.parseIntents('Upgrade Poway to GO');
+  assert(intentPoway.actions.some(a => a.type === 'override-zone' && a.payload.level === 3),
+    'parseIntents: "Upgrade Poway to GO" → override-zone level 3');
+  const intentZoneA = ai.parseIntents('trigger evacuation for Zone A');
+  assert(intentZoneA.actions.some(a => a.type === 'override-zone' && a.payload.level === 3),
+    'parseIntents: "trigger evacuation for Zone A" → Zone A=Scripps Ranch override level 3');
+  const intentBlock = ai.parseIntents('Block SR-67');
+  assert(intentBlock.actions.length > 0 && intentBlock.actions.every(a => a.type === 'block-road' && a.payload.blocked === true),
+    'parseIntents: "Block SR-67" → block-road for trunk segments');
+  const intentContra = ai.parseIntents('Enable contraflow on I-15');
+  assert(intentContra.actions.length > 0 && intentContra.actions.every(a => a.type === 'contraflow' && a.payload.enabled === true),
+    'parseIntents: "Enable contraflow on I-15" → contraflow for motorway segments');
+  const intentDowngrade = ai.parseIntents('downgrade Ramona to ready');
+  assert(intentDowngrade.actions.some(a => a.type === 'override-zone' && a.payload.level === 1),
+    'parseIntents: "downgrade Ramona to ready" → level 1');
+  const intentNoise = ai.parseIntents('how ready is Poway?');
+  assert(intentNoise.actions.length === 0,
+    'parseIntents: casual "how ready is Poway?" emits no action');
+  const intentBlank = ai.parseIntents("what's the weather like?");
+  assert(intentBlank.actions.length === 0,
+    'parseIntents: question with no command verb emits no action');
+
   console.log('---');
   console.log('Self-test', process.exitCode ? 'FAILED' : 'PASSED');
 })();

@@ -37,6 +37,68 @@ export class AIAdvisor {
     return this.model ? 'gemini-2.5-flash' : 'mock-advisor';
   }
 
+  // Detect imperative intents in a natural-language prompt and translate them
+  // into the same { type, payload } actions the keyboard / hardware paths emit.
+  // Returns { actions, summary }; caller is responsible for dispatching them.
+  parseIntents(prompt) {
+    if (!prompt) return { actions: [], summary: '' };
+    const p = String(prompt).toLowerCase();
+    const actions = [];
+    const notes = [];
+
+    // --- Zone level overrides ---
+    const zoneTokens = [
+      { match: /\b(?:scripps\s*ranch|scripps|zone\s*a)\b/, name: 'Scripps Ranch' },
+      { match: /\b(?:poway|zone\s*b)\b/,                   name: 'Poway' },
+      { match: /\b(?:ramona|zone\s*c)\b/,                  name: 'Ramona' }
+    ];
+    // Require an explicit level token to avoid false positives like
+    // "how ready is Poway?" or "is the team set?". Order: GO → READY → SET.
+    let level = null;
+    if (/\b(?:to\s+go|go\s+now|level\s*3|trigger\s+evac\w*|evacuate)\b/.test(p))    level = 3;
+    else if (/\b(?:to\s+ready|level\s*1|stand\s*down|all\s*clear)\b/.test(p))       level = 1;
+    else if (/\b(?:to\s+set|level\s*2|prepare\s+to\s+leave|stand\s*by)\b/.test(p))  level = 2;
+    if (level != null) {
+      const levelName = level === 3 ? 'GO' : level === 2 ? 'SET' : 'READY';
+      for (const z of zoneTokens) {
+        if (!z.match.test(p)) continue;
+        const zone = this.state.evacuation.zones.find(zz => zz.name === z.name);
+        if (!zone) continue;
+        actions.push({ type: 'override-zone', payload: { zoneId: zone.id, level } });
+        notes.push(`Set ${zone.name} to LEVEL ${level} ${levelName}.`);
+      }
+    }
+
+    // --- Road actions: block / unblock / contraflow ---
+    const roadTokens = [
+      { match: /\b(?:i[-\s]?15|interstate\s*15|highway\s*15|motorway)\b/, label: 'I-15',  filter: e => e.hwy === 'motorway' },
+      { match: /\b(?:sr[-\s]?67|state\s*route\s*67|highway\s*67|route\s*67|\btrunk\b)\b/, label: 'SR-67', filter: e => e.hwy === 'trunk' }
+    ];
+    for (const r of roadTokens) {
+      if (!r.match.test(p)) continue;
+      const matched = this.state.scenario.edges.filter(r.filter);
+      if (!matched.length) continue;
+      const wantsBlock    = /\b(?:block|close|shut(?:\s*down)?|stop\s*traffic)\b/.test(p);
+      const wantsUnblock  = /\b(?:unblock|reopen|open\s+(?:up\s+)?(?:i[-\s]?15|sr[-\s]?67|highway|route|the))\b/.test(p);
+      const wantsContra   = /\bcontraflow\b|\breverse\s*flow\b|\bflip\s*lanes\b/.test(p);
+      const stopContra    = /\b(?:disable|stop|end|cancel)\s+contraflow\b/.test(p);
+      if (wantsBlock) {
+        for (const e of matched) actions.push({ type: 'block-road', payload: { edgeId: e.id, blocked: true } });
+        notes.push(`Blocked ${r.label} (${matched.length} segments).`);
+      } else if (wantsUnblock) {
+        for (const e of matched) actions.push({ type: 'block-road', payload: { edgeId: e.id, blocked: false } });
+        notes.push(`Reopened ${r.label}.`);
+      }
+      if (wantsContra) {
+        const enabled = !stopContra;
+        for (const e of matched) actions.push({ type: 'contraflow', payload: { edgeId: e.id, enabled } });
+        notes.push(`${enabled ? 'Enabled' : 'Disabled'} contraflow on ${r.label}.`);
+      }
+    }
+
+    return { actions, summary: notes.join(' ') };
+  }
+
   buildContext() {
     const s = this.state;
     const lines = [];

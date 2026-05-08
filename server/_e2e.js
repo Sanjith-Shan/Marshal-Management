@@ -95,6 +95,21 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   await wait(300);
   assert(updates.advisor.length > advisorBefore, 'rewind without history produces an advisor message');
 
+  // AI intent → state mutation (Critical gap #4): asking the advisor to upgrade
+  // a zone should both produce an advisor reply AND emit override-zone, so the
+  // next snapshot/evacuation broadcast carries the override.
+  sock.emit('snapshot', null);  // no-op listener, just to refresh local
+  const intentSnapBefore = snapshot;
+  sock.emit('ai:ask', 'Upgrade Poway to GO');
+  await wait(500);
+  // The override broadcasts a fresh snapshot; pick up the most recent zones.
+  const powayAfter = snapshot?.evacuation?.zones?.find(z => z.name === 'Poway');
+  assert(powayAfter && powayAfter.level === 3,
+    `AI "Upgrade Poway to GO" mutated state (Poway level=${powayAfter?.level})`);
+  const lastAdvisor = updates.advisor[updates.advisor.length - 1];
+  assert(lastAdvisor && /Poway.*LEVEL\s*3/i.test(lastAdvisor.text),
+    `AI reply announces what it did: "${lastAdvisor?.text?.slice(0, 80)}"`);
+
   sock.disconnect();
   proc.kill();
   console.log('\ne2e test', process.exitCode ? 'FAILED' : 'PASSED');

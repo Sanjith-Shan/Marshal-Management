@@ -65,8 +65,7 @@ app.get('/api/snapshot', (req, res) => {
 app.post('/api/ai/ask', async (req, res) => {
   const { prompt } = req.body || {};
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
-  const reply = await ai.ask(prompt);
-  state.pushAdvisorMessage(reply);
+  const reply = await processAdvisorPrompt(prompt);
   res.json(reply);
 });
 
@@ -87,8 +86,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('ai:ask', async (prompt) => {
-    const reply = await ai.ask(prompt);
-    state.pushAdvisorMessage(reply);
+    await processAdvisorPrompt(prompt);
   });
 
   // Fire CA runs on the client; it streams burning-cell counts back so the
@@ -117,6 +115,24 @@ io.on('connection', (socket) => {
     }
   });
 });
+
+// --------------------- advisor prompt pipeline ---------------------
+
+// Parses imperative intents out of the prompt, dispatches them through the
+// same handleAction path the keyboard / hardware paths use, then asks the
+// advisor — which now sees the post-mutation state in its context. The
+// reply text is prefixed with what was applied so the panel + voice channel
+// announce it.
+async function processAdvisorPrompt(prompt) {
+  const { actions, summary } = ai.parseIntents(prompt);
+  for (const a of actions) {
+    try { await handleAction(a); } catch (e) { console.warn('intent dispatch failed:', a.type, e.message); }
+  }
+  const reply = await ai.ask(prompt);
+  if (summary) reply.text = `${summary} ${reply.text || ''}`.trim();
+  state.pushAdvisorMessage(reply);
+  return reply;
+}
 
 // --------------------- action dispatcher ---------------------
 
@@ -216,8 +232,7 @@ async function handleAction(msg, socket) {
       state.setPTT(payload.active);
       break;
     case 'ai:transcribe':
-      const reply = await ai.ask(payload.transcript);
-      state.pushAdvisorMessage(reply);
+      await processAdvisorPrompt(payload.transcript);
       break;
     default:
       console.warn(`[action] unknown type "${type}"`);
