@@ -21,8 +21,10 @@ export class RoadRenderer {
     this.group.add(this._blockedXGroup);
     this._blockedXMap = new Map();   // edgeId -> THREE.Mesh (the X marker)
     this._hoverEdgeId = null;
-    this._primarySet = new Set();
+    this._primarySet   = new Set();
     this._secondarySet = new Set();
+    this._evacMode = false;
+    this._targetRoadOpacity = 0.85;
   }
 
   _buildLines() {
@@ -264,7 +266,19 @@ export class RoadRenderer {
     return group;
   }
 
+  setEvacMode(active) {
+    this._evacMode = active;
+    this._targetRoadOpacity = active ? 0.12 : 0.85;
+    // Highway tube overlay is visually noisy in evacuate mode — dim it too.
+    for (const child of this.hwyGroup.children) {
+      child.material.opacity = active ? 0.08 : 0.55;
+    }
+  }
+
   update(dt) {
+    // Smooth road opacity transition
+    this.material.opacity += (this._targetRoadOpacity - this.material.opacity) * Math.min(1, dt * 5);
+
     // Pulse the X markers
     const t = performance.now() / 500;
     for (const xGroup of this._blockedXMap.values()) {

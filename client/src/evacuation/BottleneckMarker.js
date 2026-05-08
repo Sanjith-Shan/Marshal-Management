@@ -11,6 +11,11 @@ export class BottleneckMarker {
     this.group.name = 'bottlenecks';
     this.markers = [];
     this._lastSnap = null;
+    this._evacMode = false;
+  }
+
+  setEvacMode(active) {
+    this._evacMode = active;
   }
 
   applySnapshot(snap) {
@@ -71,10 +76,16 @@ export class BottleneckMarker {
 
   update(dt, camera) {
     const t = performance.now() / 400;
+    const em = this._evacMode;
     for (const m of this.markers) {
-      const s = 1 + 0.25 * Math.sin(t);
+      // In evacuate mode: larger rings, higher base opacity, faster pulse
+      const period = em ? 250 : 400;
+      const baseScale = em ? 1.4 : 1.0;
+      const s = baseScale * (1 + 0.30 * Math.sin(performance.now() / period));
       m.ring.scale.setScalar(s);
-      m.ring.material.opacity = 0.55 + 0.4 * Math.abs(Math.sin(t));
+      m.ring.material.opacity = em
+        ? 0.75 + 0.25 * Math.abs(Math.sin(performance.now() / period))
+        : 0.55 + 0.4 * Math.abs(Math.sin(t));
       if (m.label && camera) m.label.lookAt(camera.position);
     }
   }

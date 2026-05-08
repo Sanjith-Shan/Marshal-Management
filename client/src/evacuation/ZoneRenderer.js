@@ -17,6 +17,8 @@ export class ZoneRenderer {
     this.group = new THREE.Group();
     this.group.name = 'zones';
     this.byZone = new Map();
+    this._evacMode = false;
+    this._lastSnap = null;
     this._build();
   }
 
@@ -74,27 +76,39 @@ export class ZoneRenderer {
     }
   }
 
+  setEvacMode(active) {
+    this._evacMode = active;
+    if (this._lastSnap) this.applySnapshot(this._lastSnap);
+  }
+
   applySnapshot(snap) {
+    this._lastSnap = snap;
     if (!snap?.evacuation?.zones) return;
+    const em = this._evacMode;
     for (const z of snap.evacuation.zones) {
       const rec = this.byZone.get(z.name);
       if (!rec) continue;
       const c = LEVEL_COLOR[z.level] ?? LEVEL_COLOR[1];
       rec.mesh.material.color.setHex(c);
       rec.outline.material.color.setHex(c);
-      rec.mesh.material.opacity = z.level === 3 ? 0.34 : z.level === 2 ? 0.22 : 0.16;
+      // In evacuate mode zones are the primary visual — increase fill opacity.
+      rec.mesh.material.opacity = em
+        ? (z.level === 3 ? 0.58 : z.level === 2 ? 0.40 : 0.24)
+        : (z.level === 3 ? 0.34 : z.level === 2 ? 0.22 : 0.16);
       rec.level = z.level;
     }
   }
 
   update(dt) {
-    // Pulse outline of GO zones
     const t = performance.now() / 600;
+    const em = this._evacMode;
     for (const rec of this.byZone.values()) {
       if (rec.level === 3) {
-        rec.outline.material.opacity = 0.6 + 0.35 * Math.sin(t);
+        // Faster, more prominent pulse in evacuate mode
+        const period = em ? 400 : 600;
+        rec.outline.material.opacity = (em ? 0.75 : 0.6) + 0.35 * Math.sin(performance.now() / period);
       } else {
-        rec.outline.material.opacity = 0.7;
+        rec.outline.material.opacity = em ? 0.85 : 0.7;
       }
     }
   }

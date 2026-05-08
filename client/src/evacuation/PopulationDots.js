@@ -20,6 +20,7 @@ export class PopulationDots {
     this.group.name = 'populations';
     this.dotsByZone = new Map();
     this._lastSnap = null;
+    this._evacMode = false;
     this._build();
   }
 
@@ -73,6 +74,14 @@ export class PopulationDots {
     }
   }
 
+  setEvacMode(active) {
+    this._evacMode = active;
+    for (const rec of this.dotsByZone.values()) {
+      rec.points.material.size = active ? 0.032 : 0.022;
+      rec.points.material.needsUpdate = true;
+    }
+  }
+
   applySnapshot(snap) {
     this._lastSnap = snap;
     if (!snap?.evacuation?.zones) return;
@@ -84,7 +93,6 @@ export class PopulationDots {
       rec.points.material.color.setHex(
         z.level === 3 ? 0xfff3a0 : z.level === 2 ? 0xfff8c0 : 0xeaf2ff
       );
-      // Build / refresh the flow polyline when route is present.
       if (z.level >= 2 && z.route?.edgeIds?.length && z.route.destinations?.length) {
         rec.polyline = this._buildPolyline(z);
       } else {
@@ -140,7 +148,9 @@ export class PopulationDots {
 
       if (flowing) {
         // Stream rate: GO ~0.06/s (full route in ~17s), SET ~0.025/s.
-        const rate = rec.level === 3 ? 0.06 : 0.025;
+        // Evacuate mode boosts rate to emphasise urgency.
+        const boost = this._evacMode ? 1.6 : 1.0;
+        const rate = boost * (rec.level === 3 ? 0.06 : 0.025);
         rec.flowOffset = (rec.flowOffset + rate * dt) % 1;
         const poly = rec.polyline;
         for (let i = 0, k = 0; i < arr.length; i += 3, k++) {

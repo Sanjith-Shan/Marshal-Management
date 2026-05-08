@@ -17,6 +17,7 @@ const VERT = /* glsl */ `
 const FRAG = /* glsl */ `
   uniform sampler2D uState;
   uniform float uTime;
+  uniform float uFade;   // 1.0 = full, ~0.25 = evacuate-mode dimmed
   varying vec2 vUv;
 
   // Cheap hash-based noise for the flicker
@@ -72,7 +73,8 @@ const FRAG = /* glsl */ `
       alpha = max(alpha, halo * 0.55);
     }
 
-    if (alpha < 0.04) discard;
+    alpha *= uFade;
+    if (alpha < 0.015) discard;
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -111,10 +113,13 @@ export class FireOverlay {
     this.tex.magFilter = THREE.LinearFilter;
     this.tex.needsUpdate = true;
 
+    this._targetFade = 1.0;
+
     this.material = new THREE.ShaderMaterial({
       uniforms: {
         uState: { value: this.tex },
-        uTime: { value: 0 }
+        uTime:  { value: 0 },
+        uFade:  { value: 1.0 }
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -129,8 +134,15 @@ export class FireOverlay {
     this.mesh.name = 'fire-overlay';
   }
 
+  setEvacMode(active) {
+    this._targetFade = active ? 0.22 : 1.0;
+  }
+
   update(dt) {
     this.material.uniforms.uTime.value += dt;
+    // Smooth fade toward target
+    const u = this.material.uniforms.uFade;
+    u.value += (this._targetFade - u.value) * Math.min(1, dt * 4);
     const state = this.ca.state;
     const data = this.data;
     for (let i = 0; i < state.length; i++) {

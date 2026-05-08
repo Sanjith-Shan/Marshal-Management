@@ -175,18 +175,26 @@ class App {
 
   _onModeChange(mode) {
     this._currentMode = mode;
+    const isEvac = mode === 'EVACUATE';
 
-    // Cursor: crosshair signals "interaction available" in COMMAND mode.
+    // Cursor
     const cursors = { MONITOR: 'default', COMMAND: 'crosshair', EVACUATE: 'default' };
     this.canvas.style.cursor = cursors[mode] ?? 'default';
 
     // Clear any road hover state when leaving COMMAND mode.
-    if (mode !== 'COMMAND' && this.roads) {
-      this.roads.setHover(null);
-    }
+    if (mode !== 'COMMAND' && this.roads) this.roads.setHover(null);
+
+    // Propagate evacuate-mode visual flag to all renderers.
+    if (this.fireOverlay)  this.fireOverlay.setEvacMode(isEvac);
+    if (this.roads)        this.roads.setEvacMode(isEvac);
+    if (this.zones)        this.zones.setEvacMode(isEvac);
+    if (this.routes)       this.routes.setEvacMode(isEvac);
+    if (this.bottlenecks)  this.bottlenecks.setEvacMode(isEvac);
+    if (this.shelters)     this.shelters.setEvacMode(isEvac);
+    if (this.populations)  this.populations.setEvacMode(isEvac);
 
     // EVACUATE: open the evac panel if it isn't already open.
-    if (mode === 'EVACUATE') {
+    if (isEvac) {
       const panState = this.snapshot?.panels;
       if (panState && !panState.evacuation) {
         this.socket.emit('action', { type: 'panel', payload: 'evacuation' });

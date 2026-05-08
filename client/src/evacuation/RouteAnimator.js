@@ -15,8 +15,21 @@ export class RouteAnimator {
     this.terrain = terrain;
     this.group = new THREE.Group();
     this.group.name = 'routes';
-    this.routes = new Map();      // zoneName -> { path, particles, geometry, material }
+    this.routes = new Map();
     this._lastSnap = null;
+    this._evacMode = false;
+  }
+
+  setEvacMode(active) {
+    this._evacMode = active;
+    // Boost or restore all existing route materials without rebuild.
+    for (const r of this.routes.values()) {
+      const baseSize = r.level === 3 ? 0.05 : r.level === 2 ? 0.04 : 0.028;
+      const baseOpacity = r.level >= 2 ? 0.95 : 0.55;
+      r.points.material.size    = active ? baseSize * 1.8 : baseSize;
+      r.points.material.opacity = active ? 1.0 : baseOpacity;
+      r.points.material.needsUpdate = true;
+    }
   }
 
   applySnapshot(snap) {
@@ -48,11 +61,13 @@ export class RouteAnimator {
       const color = z.level === 3 ? 0x66ff99
                    : z.level === 2 ? 0xfff088
                    : 0x88ccdd;
+      const baseSize    = z.level === 3 ? 0.05 : z.level === 2 ? 0.04 : 0.028;
+      const baseOpacity = z.level >= 2 ? 0.95 : 0.55;
       const mat = new THREE.PointsMaterial({
         color,
-        size: z.level === 3 ? 0.05 : z.level === 2 ? 0.04 : 0.028,
+        size:    this._evacMode ? baseSize * 1.8 : baseSize,
         transparent: true,
-        opacity: z.level >= 2 ? 0.95 : 0.55,
+        opacity: this._evacMode ? 1.0 : baseOpacity,
         depthWrite: false,
         blending: THREE.AdditiveBlending
       });
@@ -78,7 +93,8 @@ export class RouteAnimator {
     const t = performance.now() / 1000;
     for (const route of this.routes.values()) {
       const { path, cumLen, total, phases, positions, geometry, count, level } = route;
-      const speed = level === 3 ? SPEED * 1.4 : level === 2 ? SPEED : SPEED * 0.6;
+      const speedMult = this._evacMode ? 1.5 : 1.0;
+      const speed = speedMult * (level === 3 ? SPEED * 1.4 : level === 2 ? SPEED : SPEED * 0.6);
       for (let i = 0; i < count; i++) {
         let p = (phases[i] + t * speed / total) % 1;
         const targetLen = p * total;

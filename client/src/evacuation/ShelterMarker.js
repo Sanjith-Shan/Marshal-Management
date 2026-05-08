@@ -10,7 +10,16 @@ export class ShelterMarker {
     this.group = new THREE.Group();
     this.group.name = 'shelters';
     this.markers = [];
+    this._evacMode = false;
     this._build();
+  }
+
+  setEvacMode(active) {
+    this._evacMode = active;
+    for (const m of this.markers) {
+      m.diamond.material.emissiveIntensity = active ? 1.4 : 0.6;
+      m.diamond.scale.setScalar(active ? 1.45 : 1.0);
+    }
   }
 
   _build() {
