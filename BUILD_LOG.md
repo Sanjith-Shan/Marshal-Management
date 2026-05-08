@@ -3,6 +3,35 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 3
+
+**Full project audit + 7-bug fix batch + Tier-2 polish.** All changes desktop-testable; XR path untouched. Three commits, gates green throughout (selftest 25/25, e2e 14/14, build clean).
+
+**Bug batch (commit `3bb8eee`):**
+
+- **BUG-1 (socket.io CDN → local bundle):** `client/src/main.js:1` — was loading from `cdn.socket.io`; replaced with `'socket.io-client'` package import. Bundle +43 kB (expected). Demo no longer breaks offline.
+- **BUG-2 (joystick dead event path):** `server/index.js` now handles `case 'joystick'` and `'joystick:reset'` and broadcasts them; `client/src/main.js` listens and calls `desktop.pulseRotate(dx, dy)` / `desktop.resetView()`. Three-way parity restored.
+- **BUG-3 (ETA clock drift):** `EvacuationEngine` converts fire-arrival from absolute client-CA-clock to relative: `etaMin = max(0, arrivalMin − state.simTimeMin)`. Zone margins now read correctly even as clocks drift.
+- **BUG-4 (`ai:transcribe` wired):** was dead code; now calls `processAdvisorPrompt(payload.transcript)` so future voice pipelines can use it as a distinct event.
+- **BUG-5 (buildGraph horizonMin):** parameter was accepted but never used. Removed; filter now correctly reads `fa − simTimeMin ≤ 0` (relative, not absolute), so edges actually get removed as fire arrives.
+- **BUG-6 (evacuatedPct sim-clock):** replaced `(Date.now() − lastRunAt) / 1000` with `(simTimeMin − lastRunSimMin) / evacMin`. Added `lastRunSimMin` to `StateManager.evacuation`. Time-jump now correctly moves the percentage.
+- **FRAGILITY-1 (shared polyline helper):** extracted `client/src/evacuation/_polyline.js` with `bfsPolyline` + `chainPolyline`. `RouteAnimator` now calls `chainPolyline`; `PopulationDots` calls `bfsPolyline`. Both had divergent implementations before.
+
+**Misc from bug batch:** `HUD.setFire` now renders a live fire badge in the status bar. Timeline scrubber `T` emits real `time-jump` actions (delta from `_simTimeMin`) and auto-syncs its thumb to the server clock.
+
+**Tier-2 polish (second commit):**
+
+- **Secondary evacuation routes:** `EvacuationEngine` now returns `secondaryEdgeIds` (next-10-by-frequency) alongside `edgeIds` (primary). `RoadRenderer.setRoutePrimary` accepts both and colors primary edges bright green, secondary dimmer green. `_applyEvacuationToScene` collects and passes both.
+- **Pulsing X markers on blocked roads:** `RoadRenderer.applyEdgeUpdate` now creates a crossed-bar `THREE.Group` at the edge midpoint when a road is blocked, removes it on unblock. Pulses in `update(dt)`. Per CLAUDE.md convention, this is the third leg of the demo-script "pinch SR-67 → mark blocked" beat.
+- **Bottleneck floating labels:** `BottleneckMarker` renders a canvas-texture `PlaneGeometry` label above each ring showing `NN% · hwy-class`. Labels billboard toward camera in `update`. Required adding `camera` parameter to `bottlenecks.update(dt, camera)` in `main.js`.
+- **`RoadRenderer.update(dt)` hooked into render loop** in `main.js`.
+
+**Open questions closed this session:** BUG-1 through BUG-6 from the audit. FRAGILITY-1.
+
+**Still open (from audit):** BUG-7 (RouteAnimator rebuilds on every applySnapshot — tolerated). HTTPS / Quest 3 AR (requires hardware + network decision). Hardware UNO physical end-to-end test. Mode-switch MONITOR/EVACUATE behavior. No demo scenario library. AI proactive scan doesn't trigger terrain overlays.
+
+---
+
 ## 2026-05-08 — session 2
 
 **Critical gaps #4, #5, and #6 + the AI-proactive-on-time-jump rough edge from the prior session — all closed (desktop-testable; XR untouched).** Three batches landed in order; selftest + e2e gates green throughout.
@@ -200,10 +229,10 @@ arduino/ marshal_board.ino firmware
 
 **Medium (rough edges or cosmetic gaps from spec):**
 
-7. No 30-min / 1-hr fire projection layer. Timeline slider is decorative. **(Partially addressed 2026-05-08:** time-jump buttons / `[` / `]` keys now actually advance & rewind the whole simulation via the snapshot ring. The `T` scrubber is still cosmetic — true preview-without-commit is a separate v2.**)**
-8. Engine produces only primary route; no secondary/alternate.
+7. No 30-min / 1-hr fire projection layer. **(Addressed 2026-05-08 sessions 2+3:** time-jump `[`/`]` + HUD buttons + scrubber all drive real `time-jump` actions. `T` scrubber now syncs to server clock and emits `time-jump` on drag. True "preview without commit" is deferred.**)**
+8. ~~Engine produces only primary route; no secondary/alternate.~~ **Closed 2026-05-08 session 3.** `secondaryEdgeIds` returned per zone, rendered in dimmer green.
 9. Contraflow has no animated visual (color flip only).
-10. Blocked roads turn red but don't show pulsing X markers.
+10. ~~Blocked roads turn red but don't show pulsing X markers.~~ **Closed 2026-05-08 session 3.** Pulsing crossed-bar markers added to `RoadRenderer`.
 11. Mode switch is ~cosmetic (only COMMAND has behavior).
 12. `data/demo-scenarios/` is empty. No saved Cedar Fire scenario states.
 13. Proactive AI only updates the panel — no terrain overlays.

@@ -36,16 +36,46 @@ export class BottleneckMarker {
       ring.rotation.x = -Math.PI / 2;
       ring.renderOrder = 7;
       this.group.add(ring);
-      this.markers.push({ ring, ratio: b.ratio });
+
+      // Small floating label above the ring showing capacity %, hwy class
+      const pct = Math.round(b.ratio * 100);
+      const label = this._makeLabel(`${pct}% · ${e.hwy}`, mid);
+      this.group.add(label);
+
+      this.markers.push({ ring, label, ratio: b.ratio });
     }
   }
 
-  update(dt) {
+  _makeLabel(text, pos) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(30,20,10,0.75)';
+    ctx.beginPath();
+    ctx.roundRect(2, 2, canvas.width - 4, canvas.height - 4, 6);
+    ctx.fill();
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#ffa040';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.32, 0.08),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+    );
+    mesh.position.set(pos.x, pos.y + 0.1, pos.z);
+    mesh.renderOrder = 9;
+    return mesh;
+  }
+
+  update(dt, camera) {
     const t = performance.now() / 400;
     for (const m of this.markers) {
       const s = 1 + 0.25 * Math.sin(t);
       m.ring.scale.setScalar(s);
       m.ring.material.opacity = 0.55 + 0.4 * Math.abs(Math.sin(t));
+      if (m.label && camera) m.label.lookAt(camera.position);
     }
   }
 }

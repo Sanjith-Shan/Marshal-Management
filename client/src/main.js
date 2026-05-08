@@ -237,13 +237,15 @@ class App {
     if (this.bottlenecks) this.bottlenecks.applySnapshot(snap);
     if (this.populations) this.populations.applySnapshot(snap);
 
-    // Highlight primary-route edges on the road network
+    // Highlight primary + secondary route edges on the road network
     if (this.roads && snap?.evacuation?.zones) {
-      const allRouteEdges = [];
+      const primaryEdges = [], secondaryEdges = [];
       for (const z of snap.evacuation.zones) {
-        if (z.route?.edgeIds && z.level >= 2) allRouteEdges.push(...z.route.edgeIds);
+        if (!z.route || z.level < 2) continue;
+        if (z.route.edgeIds)          primaryEdges.push(...z.route.edgeIds);
+        if (z.route.secondaryEdgeIds) secondaryEdges.push(...z.route.secondaryEdgeIds);
       }
-      this.roads.setRoutePrimary(allRouteEdges);
+      this.roads.setRoutePrimary(primaryEdges, secondaryEdges);
     }
 
     // Re-apply blocked / contraflow flags from snapshot
@@ -297,9 +299,10 @@ class App {
       this.fireCA.step(dt);
       this.fireOverlay.update(dt);
     }
+    if (this.roads) this.roads.update(dt);
     if (this.routes) this.routes.update(dt);
     if (this.populations) this.populations.update(dt);
-    if (this.bottlenecks) this.bottlenecks.update(dt);
+    if (this.bottlenecks) this.bottlenecks.update(dt, this.scene.camera);
     if (this.zones) this.zones.update(dt);
     this.scene.update(dt);
     this.scene.renderer.render(this.scene.scene, this.scene.camera);

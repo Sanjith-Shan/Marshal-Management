@@ -16,6 +16,10 @@ export class RoadRenderer {
 
     this._buildLines();
     this._buildPickProxy();
+    this._blockedXGroup = new THREE.Group();
+    this._blockedXGroup.name = 'blocked-x';
+    this.group.add(this._blockedXGroup);
+    this._blockedXMap = new Map();   // edgeId -> THREE.Mesh (the X marker)
   }
 
   _buildLines() {
@@ -135,18 +139,21 @@ export class RoadRenderer {
     this.group.add(this._pickGroup);
   }
 
-  setRoutePrimary(edgeIds) {
-    // Visually mark: turn primary route segments brighter green.
+  setRoutePrimary(edgeIds, secondaryEdgeIds = []) {
     const colors = this.lines.geometry.attributes.color;
     const arr = colors.array;
     arr.set(this._origColors);
-    const set = new Set(edgeIds);
+    const primary   = new Set(edgeIds);
+    const secondary = new Set(secondaryEdgeIds);
     for (const [eid, meta] of this._edgeMeta) {
-      if (!set.has(eid)) continue;
+      let r, g, b;
+      if (primary.has(eid))        { r = 0.36; g = 0.93; b = 0.55; }  // bright green
+      else if (secondary.has(eid)) { r = 0.22; g = 0.68; b = 0.45; }  // dimmer green
+      else continue;
       for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
-        arr[v * 3 + 0] = 0.36;
-        arr[v * 3 + 1] = 0.93;
-        arr[v * 3 + 2] = 0.55;
+        arr[v * 3 + 0] = r;
+        arr[v * 3 + 1] = g;
+        arr[v * 3 + 2] = b;
       }
     }
     colors.needsUpdate = true;
@@ -172,6 +179,46 @@ export class RoadRenderer {
       arr[v * 3 + 2] = b;
     }
     colors.needsUpdate = true;
+
+    // Blocked X marker: add on block, remove on unblock.
+    if (u.blocked && !this._blockedXMap.has(u.id)) {
+      const e = this.scenario.edges.find(ed => ed.id === u.id);
+      if (e) {
+        const A = this.scenario.nodes[e.u];
+        const B = this.scenario.nodes[e.v];
+        const mid = this.terrain.gridToWorld((A.x + B.x) / 2, (A.z + B.z) / 2, ROAD_LIFT + 0.02);
+        const xMesh = this._makeXMarker(mid);
+        this._blockedXGroup.add(xMesh);
+        this._blockedXMap.set(u.id, xMesh);
+      }
+    } else if (!u.blocked && this._blockedXMap.has(u.id)) {
+      this._blockedXGroup.remove(this._blockedXMap.get(u.id));
+      this._blockedXMap.delete(u.id);
+    }
+  }
+
+  _makeXMarker(pos) {
+    // Two thin boxes crossed at 45°
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.9, depthWrite: false });
+    const barGeom = new THREE.BoxGeometry(0.18, 0.01, 0.025);
+    const group = new THREE.Group();
+    const bar1 = new THREE.Mesh(barGeom, mat);
+    bar1.rotation.y = Math.PI / 4;
+    const bar2 = new THREE.Mesh(barGeom, mat);
+    bar2.rotation.y = -Math.PI / 4;
+    group.add(bar1, bar2);
+    group.position.copy(pos);
+    group.renderOrder = 8;
+    return group;
+  }
+
+  update(dt) {
+    // Pulse the X markers
+    const t = performance.now() / 500;
+    for (const xGroup of this._blockedXMap.values()) {
+      const s = 1 + 0.18 * Math.sin(t);
+      xGroup.scale.setScalar(s);
+    }
   }
 
   pickEdge(camera, ndcX, ndcY) {

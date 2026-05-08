@@ -190,13 +190,13 @@ export class EvacuationEngine {
       if (route) {
         z.evacMin = Math.round(route.costMin + HEADWAY_MIN);
         z.marginMin = Number.isFinite(z.etaMin) ? z.etaMin - z.evacMin : 999;
-        // Top edges by frequency = primary route
-        const primary = [...route.edgeFreq.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 18)
-          .map(([eid]) => eid);
+        // Sort all route edges by frequency; top 18 = primary, next 10 = secondary.
+        const sorted = [...route.edgeFreq.entries()].sort((a, b) => b[1] - a[1]);
+        const primary   = sorted.slice(0, 18).map(([eid]) => eid);
+        const secondary = sorted.slice(18, 28).map(([eid]) => eid);
         z.route = {
           edgeIds: primary,
+          secondaryEdgeIds: secondary,
           destinations: [...route.destinations.entries()]
             .sort((a, b) => b[1] - a[1])
             .map(([name, count]) => ({ name, count }))
