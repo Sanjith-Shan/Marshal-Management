@@ -1,12 +1,15 @@
 // PopulationDots — small white dots representing residents at each population
-// node. When a zone goes to LEVEL 3 GO, dots animate along its evacuation
-// route toward the shelter, then fade.
+// node. Idle: jitter at home positions. When a zone is at LEVEL 2 SET or
+// LEVEL 3 GO, dots flow along the zone's evacuation route toward the largest
+// shelter. The route's edgeIds is the top-frequency subset (not an ordered
+// path), so we BFS over the subgraph to recover an ordered polyline.
 
 import * as THREE from 'three';
 
 const DOTS_PER_PERSON = 0.01;     // 100 people = 1 dot
 const MIN_DOTS_PER_NODE = 2;
 const MAX_DOTS_PER_NODE = 8;
+const FLOW_HEIGHT = 0.04;
 
 export class PopulationDots {
   constructor(scenario, terrain) {
@@ -14,7 +17,7 @@ export class PopulationDots {
     this.terrain = terrain;
     this.group = new THREE.Group();
     this.group.name = 'populations';
-    this.dotsByZone = new Map();  // zoneName -> { positions, geom, points, basePositions, evacuated }
+    this.dotsByZone = new Map();
     this._lastSnap = null;
     this._build();
   }
@@ -27,6 +30,7 @@ export class PopulationDots {
     }
     for (const [zone, pops] of byZone) {
       const positions = [];
+      const phases = [];
       for (const p of pops) {
         const n = this.scenario.nodes[p.nodeId];
         const cnt = Math.min(MAX_DOTS_PER_NODE,
@@ -36,10 +40,12 @@ export class PopulationDots {
           const jy = n.z + (Math.random() - 0.5) * 1.6;
           const v = this.terrain.gridToWorld(jx, jy, 0.025);
           positions.push(v.x, v.y, v.z);
+          phases.push(Math.random());
         }
       }
       const arr = new Float32Array(positions);
       const base = arr.slice();
+      const phaseArr = new Float32Array(phases);
       const geom = new THREE.BufferGeometry();
       geom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       const mat = new THREE.PointsMaterial({
@@ -52,7 +58,17 @@ export class PopulationDots {
       const pts = new THREE.Points(geom, mat);
       pts.renderOrder = 4;
       this.group.add(pts);
-      this.dotsByZone.set(zone, { positions: arr, base, geom, points: pts, level: 1, evacPct: 0 });
+      this.dotsByZone.set(zone, {
+        positions: arr,
+        base,
+        phases: phaseArr,
+        geom,
+        points: pts,
+        level: 1,
+        evacPct: 0,
+        polyline: null,
+        flowOffset: 0
+      });
     }
   }
 
@@ -67,24 +83,115 @@ export class PopulationDots {
       rec.points.material.color.setHex(
         z.level === 3 ? 0xfff3a0 : z.level === 2 ? 0xfff8c0 : 0xeaf2ff
       );
+      // Build / refresh the flow polyline when route is present.
+      if (z.level >= 2 && z.route?.edgeIds?.length && z.route.destinations?.length) {
+        rec.polyline = this._buildPolyline(z);
+      } else {
+        rec.polyline = null;
+      }
     }
+  }
+
+  _buildPolyline(zone) {
+    const populations = this.scenario.populations.filter(p => p.zone === zone.name);
+    if (!populations.length) return null;
+    populations.sort((a, b) => b.count - a.count);
+    const startNode = populations[0].nodeId;
+
+    const topDestName = zone.route.destinations[0]?.name;
+    const dest = this.scenario.shelters.find(s => s.name === topDestName);
+    if (!dest) return null;
+    const endNode = dest.nodeId;
+
+    const allowed = new Set(zone.route.edgeIds);
+    const adj = new Map();
+    for (const e of this.scenario.edges) {
+      if (!allowed.has(e.id)) continue;
+      if (!adj.has(e.u)) adj.set(e.u, []);
+      if (!adj.has(e.v)) adj.set(e.v, []);
+      adj.get(e.u).push(e.v);
+      adj.get(e.v).push(e.u);
+    }
+    const came = new Map();
+    came.set(startNode, null);
+    const queue = [startNode];
+    while (queue.length) {
+      const cur = queue.shift();
+      if (cur === endNode) break;
+      const next = adj.get(cur) || [];
+      for (const nb of next) {
+        if (came.has(nb)) continue;
+        came.set(nb, cur);
+        queue.push(nb);
+      }
+    }
+    if (!came.has(endNode)) return null;
+
+    const nodeIds = [];
+    let cur = endNode;
+    while (cur != null) {
+      nodeIds.unshift(cur);
+      cur = came.get(cur);
+    }
+    if (nodeIds.length < 2) return null;
+
+    const pts = nodeIds.map(id => {
+      const n = this.scenario.nodes[id];
+      return this.terrain.gridToWorld(n.x, n.z, FLOW_HEIGHT);
+    });
+    return pts;
+  }
+
+  _samplePolyline(poly, t) {
+    const segs = poly.length - 1;
+    const u = ((t % 1) + 1) % 1;
+    const sf = u * segs;
+    const i = Math.floor(sf);
+    const f = sf - i;
+    const a = poly[i];
+    const b = poly[Math.min(i + 1, poly.length - 1)];
+    return {
+      x: a.x + (b.x - a.x) * f,
+      y: a.y + (b.y - a.y) * f,
+      z: a.z + (b.z - a.z) * f
+    };
   }
 
   update(dt) {
     const t = performance.now() / 1000;
     for (const rec of this.dotsByZone.values()) {
-      // Subtle idle jitter
       const arr = rec.positions;
       const base = rec.base;
-      for (let i = 0; i < arr.length; i += 3) {
-        const j = (Math.sin(t * 1.6 + i * 0.1) * 0.5 + 0.5) * 0.005;
-        arr[i + 1] = base[i + 1] + j;
+      const phases = rec.phases;
+      const flowing = !!rec.polyline && rec.level >= 2;
+
+      if (flowing) {
+        // Stream rate: GO ~0.06/s (full route in ~17s), SET ~0.025/s.
+        const rate = rec.level === 3 ? 0.06 : 0.025;
+        rec.flowOffset = (rec.flowOffset + rate * dt) % 1;
+        const poly = rec.polyline;
+        for (let i = 0, k = 0; i < arr.length; i += 3, k++) {
+          const phase = (phases[k] + rec.flowOffset) % 1;
+          const p = this._samplePolyline(poly, phase);
+          arr[i] = p.x;
+          arr[i + 1] = p.y + Math.sin(t * 4 + k) * 0.003;
+          arr[i + 2] = p.z;
+        }
+        // Once a fraction == evacPct of the stream has departed, dim the dots
+        // riding past that point on the rear of the route (they represent
+        // residents already at shelters).
+        const evacFrac = Math.min(0.85, (rec.evacPct || 0) / 100);
+        rec.points.material.opacity = Math.max(0.2, 0.85 - evacFrac * 0.55);
+      } else {
+        // Idle: subtle breathing jitter at home positions.
+        for (let i = 0; i < arr.length; i += 3) {
+          const j = (Math.sin(t * 1.6 + i * 0.1) * 0.5 + 0.5) * 0.005;
+          arr[i] = base[i];
+          arr[i + 1] = base[i + 1] + j;
+          arr[i + 2] = base[i + 2];
+        }
+        rec.points.material.opacity = 0.75;
       }
-      // GO zones: linearly fade out a fraction matching evacPct
-      const opacity = rec.level === 3
-        ? Math.max(0.05, 0.85 * (1 - (rec.evacPct / 100) * 0.85))
-        : 0.75;
-      rec.points.material.opacity = opacity;
       rec.geom.attributes.position.needsUpdate = true;
     }
   }

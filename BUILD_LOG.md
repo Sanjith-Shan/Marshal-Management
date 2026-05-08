@@ -3,6 +3,38 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 2
+
+**Critical gaps #4, #5, and #6 + the AI-proactive-on-time-jump rough edge from the prior session — all closed (desktop-testable; XR untouched).** Three batches landed in order; selftest + e2e gates green throughout.
+
+**1. Proactive AI now reacts to time-jumps (`server/index.js`).** When `|deltaMin| ≥ 30`, the time-jump handler kicks `ai.proactiveScan()` immediately. Forward path defers until the client's `time-jump:applied` ack lands (so evac has re-run against the post-jump arrivalByNode); rewind path runs inline after the in-handler `evac.runFullEvacuation()`. Closes the "advisor lags up to one wall-clock minute behind a leaping sim clock" rough edge from the prior session.
+
+**2. Voice output for advisor messages (`client/src/panels/AIAdvisorPanel.js`).** Web SpeechSynthesis speaks fresh, non-system advisor messages as they arrive. `VOICE: ON/OFF` toggle in the panel header, persisted via `localStorage` key `mm.advisorVoice`. History replay (`setHistory`) is silent. Closes Critical gap #5 — no ElevenLabs needed.
+
+**3. AI can mutate state via voice intents (`server/services/AIAdvisor.js`, `server/index.js`).** New `parseIntents(prompt)` method on AIAdvisor returns `{ actions, summary }` in the same `{ type, payload }` action shape the keyboard / hardware paths emit. Server now funnels HTTP `/api/ai/ask`, `socket.on('ai:ask')`, and `case 'ai:transcribe'` through a single `processAdvisorPrompt(prompt)` helper that:
+  1. parses intents,
+  2. dispatches them through the existing `handleAction` path (so all renderers update),
+  3. asks the advisor (which sees post-mutation state in `buildContext`),
+  4. prepends the action summary to the reply text so the panel + voice channel announce what was done.
+
+  Recognized intents: `Upgrade <zone> to GO|SET|READY` / `trigger evacuation for Zone A/B/C` / `Block I-15` / `Reopen SR-67` / `Enable contraflow on I-15` / `stop contraflow on SR-67`. Level detection requires explicit phrasing (`to go`, `level 3`, `trigger evac`, `stand down`, `to ready`, etc.) so casual `"how ready is Poway?"` doesn't false-trigger an override. Zone tokens accept both proper names ("Poway", "Scripps Ranch", "Ramona") and the demo-script aliases ("Zone A", "B", "C"). Road tokens cover both class names ("motorway", "trunk") and the spec's San Diego references ("I-15", "SR-67", "interstate 15", "highway 67"). Closes Critical gap #4.
+
+**4. Population dots flow along routes (`client/src/evacuation/PopulationDots.js`).** Was: dots fade in place when a zone goes GO. Now: when a zone is at LEVEL 2 SET or LEVEL 3 GO and has a `route.edgeIds`, each dot rides a phase along an ordered polyline reconstructed from the route subgraph. Implementation: BFS from the zone's most-populous population node to the largest-share shelter through only the route's edges, then sample the resulting polyline with per-dot phase offsets so the stream looks continuous. Flow rate scales by level (GO 0.06/s, SET 0.025/s); subtle vertical sine adds liveness. `evacuatedPct` dims the stream as more residents arrive at shelters. Falls back to idle jitter if BFS can't connect (defensive — `route.edgeIds` is the top-18-by-frequency subset, not guaranteed to be a single connected path). Closes Critical gap #6.
+
+**Verification.** `npm run build` clean (27 modules, ~543 kB). `node server/_selftest.js` 25/25 (was 18; +7 for `parseIntents`). `node server/_e2e.js` 14/14 (was 12; +2 for AI intent → state mutation round-trip).
+
+**XR safety.** No edits to `ARSession.js`, `SceneRoot.js`, or the per-frame XR gating in `main.js`. AIAdvisorPanel is a DOM panel (still 🟡 in the panel grading — DOM not 3D Three.js planes); voice output works regardless of XR mode if the device's SpeechSynthesis is available (Quest Browser has it).
+
+**Open questions resolved:** the proactive-cadence-vs-sim-jump question from the prior session (kicked from the time-jump handler at ≥ 30 min). Critical gap #4 (AI cannot mutate state). #5 (no voice output). #6 (population dots don't flow).
+
+**Still open:**
+- AR / WebXR untested on real Quest 3 (Critical #1–3, unchanged).
+- Hardware "hold = ±60 min" still not implemented; needs the board flashed.
+- `route.edgeIds` is a frequency-ranked subset, not an ordered path — `PopulationDots._buildPolyline` BFSes through it. If the engine ever returns a route that fragments into ≥ 2 components, BFS will only cover one and dots fall back to idle jitter for that zone. Acceptable; flagged here so future-me knows where to look if a zone's dots stop flowing unexpectedly.
+- Voice output uses default system voice. If the demo room is loud or the default voice is bad, no voice picker UI yet.
+
+---
+
 ## 2026-05-08
 
 **TODO group H1/H2/H3 landed (desktop-testable; XR path untouched).** Time-jump action wired end-to-end: keyboard `[` / `]` (Shift = ±60), HUD «« / »» buttons (`client/index.html:50-51`, `client/src/ui/HUD.js:26-37`), and Arduino A2/A3 (`arduino/marshal_board/marshal_board.ino:25-26`, `server/services/ArduinoService.js:75-86`) all emit the same `{ type: 'time-jump', payload: { deltaMin } }` action shape. Three pieces of new infrastructure:
@@ -121,8 +153,8 @@ arduino/ marshal_board.ino firmware
 | 2. Live Fire Spread Simulation | 🟡 | Rothermel-lite CA + wind + slope + embers all real. Fuel grid is **procedural** (no LANDFIRE). No 30-min / 1-hr projection visuals — only current state. Timeline scrubber decorative. |
 | 3. Evacuation Planning System | 🟢 / 🟡 | Engine is real (Dijkstra + BPR + capacity-aware multi-source). Operates on a **synthetic road network**. Only primary route computed (no secondary/alternate). |
 | 4. Floating AR Information Panels | 🟡 | Real and styled — but **DOM, not 3D Three.js planes**. In Quest passthrough they may not appear at all. |
-| 5. AI Strategic Advisor | 🟡 | Gemini path real if key set. AI **cannot trigger actions** ("Upgrade Zone B to Go" produces text only, no state mutation). Proactive scan only writes to panel, not terrain. No voice output. |
-| 6. Voice + Hand + Hardware Control | 🔴 / 🟡 | Voice input + keyboard fallback work. **Hand tracking 0% implemented.** Gesture detection 0%. Hardware firmware written but **never validated on physical UNO**. |
+| 5. AI Strategic Advisor | 🟢 | Gemini path real if key set. **AI now mutates state** via `parseIntents` ("Upgrade Zone B to GO", "Block SR-67", "Enable contraflow on I-15") → real `override-zone` / `block-road` / `contraflow` actions through the same dispatcher as keyboard / hardware. **Voice output** via Web SpeechSynthesis (panel toggle). Proactive scan still only writes to panel, not terrain overlays — but now also kicks on time-jump ≥ 30 min. |
+| 6. Voice + Hand + Hardware Control | 🟡 | Voice input + keyboard fallback work; voice now triggers state-mutating actions (override-zone, block-road, contraflow). **Hand tracking 0% implemented.** Gesture detection 0%. Hardware firmware written but **never validated on physical UNO**. |
 | 7. Live Data Feeds | 🟡 | NWS weather is **real**. Everything else (FIRMS / 3DEP / LANDFIRE / OSM / Census) is procedural or stubbed. |
 
 ## Run modes confirmed
@@ -162,9 +194,9 @@ arduino/ marshal_board.ino firmware
 1. WebXR is untested on real hardware. RATK plane detection, anchors, hand tracking — none integrated.
 2. AR panels stay DOM in immersive mode — likely invisible in Quest passthrough.
 3. HTTPS not configured. Quest 3 WebXR generally requires it.
-4. Voice can't trigger actions. Spec listed several voice intents that just don't fire.
-5. AI advisor has no voice output. Web SpeechSynthesis is one call away.
-6. Population dots don't actually flow along routes — they fade in place.
+4. ~~Voice can't trigger actions.~~ **Closed 2026-05-08 session 2.** `AIAdvisor.parseIntents()` now translates "Upgrade Zone B to GO", "Block SR-67", "Enable contraflow on I-15", etc. into actions dispatched through `handleAction`.
+5. ~~AI advisor has no voice output.~~ **Closed 2026-05-08 session 2.** Web SpeechSynthesis in `AIAdvisorPanel`, with a persisted ON/OFF toggle.
+6. ~~Population dots don't actually flow along routes — they fade in place.~~ **Closed 2026-05-08 session 2.** Dots now ride a BFS-reconstructed polyline from population → top shelter when level ≥ 2.
 
 **Medium (rough edges or cosmetic gaps from spec):**
 
