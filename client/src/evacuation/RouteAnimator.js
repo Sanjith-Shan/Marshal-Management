@@ -4,6 +4,7 @@
 // edge polyline each frame.
 
 import * as THREE from 'three';
+import { chainPolyline } from './_polyline.js';
 
 const PARTICLES_PER_ROUTE = 90;
 const SPEED = 0.6;                // world units per second along path
@@ -63,46 +64,14 @@ export class RouteAnimator {
   }
 
   _edgesToPolyline(edgeIds) {
-    // Build a polyline by walking edges in order. Endpoints may not align;
-    // we order by joining each edge to whichever endpoint of the prior edge
-    // matches.
-    const edges = edgeIds.map(id => this.scenario.edges.find(e => e.id === id)).filter(Boolean);
-    if (edges.length === 0) return [];
-    // BFS from any edge to build connected segments — simpler: join edges
-    // greedily by shared endpoints.
-    const used = new Array(edges.length).fill(false);
-    const ordered = [edges[0]];
-    used[0] = true;
-    let head = edges[0].u, tail = edges[0].v;
-    let progress = true;
-    while (progress) {
-      progress = false;
-      for (let i = 0; i < edges.length; i++) {
-        if (used[i]) continue;
-        const e = edges[i];
-        if (e.u === tail) { ordered.push(e); used[i] = true; tail = e.v; progress = true; }
-        else if (e.v === tail) { ordered.push({ ...e, u: e.v, v: e.u }); used[i] = true; tail = e.u; progress = true; }
-        else if (e.u === head) { ordered.unshift({ ...e, u: e.v, v: e.u }); used[i] = true; head = e.v; progress = true; }
-        else if (e.v === head) { ordered.unshift(e); used[i] = true; head = e.u; progress = true; }
-        if (progress) break;
-      }
-    }
-    const pts = [];
-    for (let i = 0; i < ordered.length; i++) {
-      const e = ordered[i];
-      const A = this.scenario.nodes[e.u];
-      const B = this.scenario.nodes[e.v];
-      if (i === 0) pts.push(this.terrain.gridToWorld(A.x, A.z, 0.04));
-      // subdivide
-      const STEPS = 4;
-      for (let s = 1; s <= STEPS; s++) {
-        const t = s / STEPS;
-        const gx = A.x + (B.x - A.x) * t;
-        const gy = A.z + (B.z - A.z) * t;
-        pts.push(this.terrain.gridToWorld(gx, gy, 0.04));
-      }
-    }
-    return pts;
+    return chainPolyline(
+      edgeIds,
+      this.scenario.edges,
+      this.scenario.nodes,
+      (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
+      0.04,
+      4
+    );
   }
 
   update(dt) {

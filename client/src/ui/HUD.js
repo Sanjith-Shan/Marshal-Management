@@ -13,6 +13,7 @@ export class HUD {
     this.timeline = document.getElementById('timeline');
     this.timelineSlider = document.getElementById('timeline-slider');
     this.timelineValue = document.getElementById('timeline-value');
+    this._simTimeMin = 0;      // tracked so slider can compute time-jump delta
 
     document.getElementById('btn-help').addEventListener('click', () => this.showHelp(true));
     document.getElementById('help-close').addEventListener('click', () => this.showHelp(false));
@@ -37,9 +38,12 @@ export class HUD {
     });
 
     this.timelineSlider.addEventListener('input', () => {
-      const v = parseInt(this.timelineSlider.value, 10);
-      this.timelineValue.textContent = `+${v} min`;
-      this.socket.emit('action', { type: 'timeline', payload: { minutes: v } });
+      const target = parseInt(this.timelineSlider.value, 10);
+      this.timelineValue.textContent = `T+${target}m`;
+      const delta = target - this._simTimeMin;
+      if (delta !== 0) {
+        this.socket.emit('action', { type: 'time-jump', payload: { deltaMin: delta } });
+      }
     });
 
     this.fireBadge = null;
@@ -71,9 +75,15 @@ export class HUD {
   }
 
   setSimTime(min) {
+    this._simTimeMin = min;
     const m = Math.floor(min);
     const s = Math.floor((min - m) * 60);
     this.timeLabel.textContent = `T+${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    // Keep scrubber thumb in sync so it reads absolute target time
+    if (this.timelineSlider && !this.timelineSlider.matches(':active')) {
+      this.timelineSlider.value = Math.min(180, Math.round(min));
+      this.timelineValue.textContent = `T+${Math.round(min)}m`;
+    }
   }
 
   setPTT(active) {
@@ -82,8 +92,15 @@ export class HUD {
   }
 
   setFire(f) {
-    // No dedicated fire HUD in v1, but we could add a fire perimeter readout
-    // here if desired.
+    if (!f) return;
+    // Show a compact fire badge in the status bar if not already there.
+    if (!this.fireBadge) {
+      this.fireBadge = document.createElement('span');
+      this.fireBadge.id = 'fire-badge';
+      this.fireBadge.style.cssText = 'margin-left:8px;color:var(--accent-hot);font-size:11px;letter-spacing:0.06em;';
+      document.getElementById('status-bar').appendChild(this.fireBadge);
+    }
+    this.fireBadge.textContent = `· 🔥 ${f.burningCells}B ${f.burnedCells}Δ`;
   }
 
   applySnapshot(snap) {

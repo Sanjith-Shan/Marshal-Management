@@ -37,6 +37,7 @@ export class StateManager extends EventEmitter {
     this.fireArrivalByNode = new Map();   // nodeId -> minutes until fire
     this.evacuation = {
       lastRunAt: 0,
+      lastRunSimMin: 0,      // sim-clock when evac last ran (for evacuatedPct)
       zones: scenario.zones.map(z => ({ ...z })),
       bottlenecks: [],
       shelterUsage: scenario.shelters.map(s => ({ nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0 })),
@@ -203,6 +204,7 @@ export class StateManager extends EventEmitter {
     this.fireArrivalByNode.clear();
     this.evacuation = {
       lastRunAt: 0,
+      lastRunSimMin: 0,
       zones: scenario.zones.map(z => ({ ...z })),
       bottlenecks: [],
       shelterUsage: scenario.shelters.map(s => ({ nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0 })),
@@ -298,6 +300,7 @@ export class StateManager extends EventEmitter {
 
   applyEvacuationResult(result) {
     this.evacuation.lastRunAt = Date.now();
+    this.evacuation.lastRunSimMin = this.simTimeMin;
     this.evacuation.zones = result.zones;
     this.evacuation.bottlenecks = result.bottlenecks;
     this.evacuation.shelterUsage = result.shelterUsage || this.evacuation.shelterUsage;

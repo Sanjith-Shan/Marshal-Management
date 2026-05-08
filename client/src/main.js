@@ -1,4 +1,4 @@
-import { io as socketIO } from 'https://cdn.socket.io/4.7.5/socket.io.esm.min.js';
+import { io as socketIO } from 'socket.io-client';
 import * as THREE from 'three';
 
 import { SceneRoot } from './ar/SceneRoot.js';
@@ -144,6 +144,13 @@ class App {
     });
 
     this.socket.on('ptt', (active) => this.hud.setPTT(active));
+
+    this.socket.on('joystick', ({ dx, dy }) => {
+      if (this.desktop) this.desktop.pulseRotate(dx, dy);
+    });
+    this.socket.on('joystick:reset', () => {
+      if (this.desktop) this.desktop.resetView();
+    });
   }
 
   _wireUI() {

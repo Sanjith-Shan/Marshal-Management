@@ -228,11 +228,21 @@ async function handleAction(msg, socket) {
       }
       break;
     }
+    case 'joystick':
+      // Broadcast directly to clients so DesktopControls can pulseRotate.
+      // Server has no camera state; this is a pure client-side operation.
+      state.broadcast('joystick', payload);
+      break;
+    case 'joystick:reset':
+      state.broadcast('joystick:reset', {});
+      break;
     case 'ptt':
       state.setPTT(payload.active);
       break;
     case 'ai:transcribe':
-      await processAdvisorPrompt(payload.transcript);
+      // Alias for ai:ask sent from future voice-pipeline code. Prompt comes in
+      // as payload.transcript; funnel through the same intent parser.
+      if (payload?.transcript) await processAdvisorPrompt(payload.transcript);
       break;
     default:
       console.warn(`[action] unknown type "${type}"`);

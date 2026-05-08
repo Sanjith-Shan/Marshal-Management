@@ -18,20 +18,23 @@ export class EvacuationEngine {
     this.lastResult = null;
   }
 
-  // Build the routing graph from the current scenario, removing edges that
-  // are blocked or that fire will reach within the planning horizon.
-  buildGraph(horizonMin = 60) {
+  // Build the routing graph from the current scenario, removing edges where
+  // fire has already arrived (arrival time - current sim clock <= 0).
+  buildGraph() {
     const { nodes, edges } = this.state.scenario;
     const adj = new Map();
     for (const n of nodes) adj.set(n.id, []);
     const fireArrival = this.state.fireArrivalByNode || new Map();
+    const now = this.state.simTimeMin;
     for (const e of edges) {
       if (e.blocked) continue;
       const fa = Math.min(
         fireArrival.get(e.u) ?? Infinity,
         fireArrival.get(e.v) ?? Infinity
       );
-      if (fa <= 0) continue;     // fire already there
+      // fa is in absolute client-CA-clock minutes. Convert to relative: skip
+      // edges where fire has already arrived at the current server sim clock.
+      if (Number.isFinite(fa) && fa - now <= 0) continue;
       const length = this.edgeLength(e);
       const baseTimeMin = (length / 1000) / (e.speed / 60);
       const capacity = e.contra ? e.capacity * 1.8 : e.capacity;
@@ -174,7 +177,14 @@ export class EvacuationEngine {
         const a = this.state.fireArrivalByNode.get(nid);
         if (typeof a === 'number' && a < earliestFire) earliestFire = a;
       }
-      z.etaMin = Number.isFinite(earliestFire) ? Math.round(earliestFire) : 999;
+      // arrivalMin is an absolute client-CA-clock value that drifts from the
+      // server clock (client CA steps ~2.5x faster). Convert to "time from
+      // now" by subtracting the current server sim clock so zone ETAs read as
+      // "fire arrives in N minutes" rather than "fire arrived at absolute
+      // minute N."
+      z.etaMin = Number.isFinite(earliestFire)
+        ? Math.max(0, Math.round(earliestFire - this.state.simTimeMin))
+        : 999;
 
       const route = zoneRoutes.get(z.name);
       if (route) {
@@ -212,12 +222,11 @@ export class EvacuationEngine {
         z.level = 1;
       }
 
-      // Evacuation progress: simple model — once GO triggered, evacuated
-      // grows linearly toward 100% over evacMin.
-      const sinceRun = (Date.now() - this.state.evacuation.lastRunAt) / 1000;
+      // Evacuation progress: linear ramp over evacMin simulated minutes.
+      // Uses sim-clock delta so time-jump forward/back moves the percentage.
+      const simElapsed = this.state.simTimeMin - this.state.evacuation.lastRunSimMin;
       if (z.level >= 3 && z.evacMin > 0) {
-        const pct = Math.min(100, (sinceRun / (z.evacMin * 60)) * 100);
-        z.evacuatedPct = Math.round(pct);
+        z.evacuatedPct = Math.round(Math.min(100, (simElapsed / z.evacMin) * 100));
       }
     }
 

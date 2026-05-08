@@ -5,6 +5,7 @@
 // path), so we BFS over the subgraph to recover an ordered polyline.
 
 import * as THREE from 'three';
+import { bfsPolyline } from './_polyline.js';
 
 const DOTS_PER_PERSON = 0.01;     // 100 people = 1 dot
 const MIN_DOTS_PER_NODE = 2;
@@ -101,45 +102,17 @@ export class PopulationDots {
     const topDestName = zone.route.destinations[0]?.name;
     const dest = this.scenario.shelters.find(s => s.name === topDestName);
     if (!dest) return null;
-    const endNode = dest.nodeId;
 
-    const allowed = new Set(zone.route.edgeIds);
-    const adj = new Map();
-    for (const e of this.scenario.edges) {
-      if (!allowed.has(e.id)) continue;
-      if (!adj.has(e.u)) adj.set(e.u, []);
-      if (!adj.has(e.v)) adj.set(e.v, []);
-      adj.get(e.u).push(e.v);
-      adj.get(e.v).push(e.u);
-    }
-    const came = new Map();
-    came.set(startNode, null);
-    const queue = [startNode];
-    while (queue.length) {
-      const cur = queue.shift();
-      if (cur === endNode) break;
-      const next = adj.get(cur) || [];
-      for (const nb of next) {
-        if (came.has(nb)) continue;
-        came.set(nb, cur);
-        queue.push(nb);
-      }
-    }
-    if (!came.has(endNode)) return null;
-
-    const nodeIds = [];
-    let cur = endNode;
-    while (cur != null) {
-      nodeIds.unshift(cur);
-      cur = came.get(cur);
-    }
-    if (nodeIds.length < 2) return null;
-
-    const pts = nodeIds.map(id => {
-      const n = this.scenario.nodes[id];
-      return this.terrain.gridToWorld(n.x, n.z, FLOW_HEIGHT);
-    });
-    return pts;
+    return bfsPolyline(
+      zone.route.edgeIds,
+      startNode,
+      dest.nodeId,
+      this.scenario.edges,
+      this.scenario.nodes,
+      (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
+      FLOW_HEIGHT,
+      3
+    );
   }
 
   _samplePolyline(poly, t) {
