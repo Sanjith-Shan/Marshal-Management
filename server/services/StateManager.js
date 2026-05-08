@@ -74,6 +74,8 @@ export class StateManager extends EventEmitter {
     // fetches them via REST or just regenerates client-side using the same seed.
     return {
       seed: this.scenario.seed,
+      scenarioId: this.scenario.scenarioId,
+      scenarioName: this.scenario.scenarioName,
       name: this.scenario.name,
       gridSize: this.scenario.gridSize,
       worldMeters: this.scenario.worldMeters,

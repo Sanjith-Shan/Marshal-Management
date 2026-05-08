@@ -11,7 +11,7 @@ import { EvacuationEngine } from './services/EvacuationEngine.js';
 import { WeatherService } from './services/WeatherService.js';
 import { AIAdvisor } from './services/AIAdvisor.js';
 import { ArduinoService } from './services/ArduinoService.js';
-import { ScenarioBuilder } from './services/ScenarioBuilder.js';
+import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
 
@@ -56,6 +56,14 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/scenario', (req, res) => {
   res.json(state.publicScenario());
+});
+
+app.get('/api/scenarios', (req, res) => {
+  // List of available demo presets for the HUD picker.
+  res.json({
+    available: Object.values(SCENARIOS).map(s => ({ id: s.id, name: s.name })),
+    current: state.scenario.scenarioId
+  });
 });
 
 app.get('/api/snapshot', (req, res) => {
@@ -143,9 +151,11 @@ async function handleAction(msg, socket) {
       state.setMode('EVACUATE');
       await evac.runFullEvacuation();
       break;
-    case 'reset':
-      state.resetScenario(ScenarioBuilder.build({ seed: state.scenario.seed }));
+    case 'reset': {
+      const nextId = payload?.scenarioId || state.scenario.scenarioId || DEFAULT_SCENARIO_ID;
+      state.resetScenario(ScenarioBuilder.build({ seed: state.scenario.seed, scenarioId: nextId }));
       break;
+    }
     case 'mode':
       state.setMode(payload);
       break;

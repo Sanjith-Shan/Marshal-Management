@@ -20,9 +20,20 @@ const FUEL = {
   URBAN: 4,
 };
 
+// Named demo scenarios. All share seed 42 (same Cedar Corridor map) but
+// differ in ignition point — gives 3 distinctly-shaped fires for replay.
+// Display name is shown in the HUD picker.
+export const SCENARIOS = {
+  cedar:    { id: 'cedar',    name: 'Cedar Fire (2003)',          ignition: { gx: 80,  gy: 65  } },
+  witch:    { id: 'witch',    name: 'Witch Creek (2007 — East)',  ignition: { gx: 115, gy: 100 } },
+  plumas:   { id: 'plumas',   name: 'Plumas Approach (West)',     ignition: { gx: 45,  gy: 65  } },
+};
+export const DEFAULT_SCENARIO_ID = 'cedar';
+
 export const ScenarioBuilder = {
-  build({ seed = 42 } = {}) {
+  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID } = {}) {
     const rng = mulberry32(seed);
+    const preset = SCENARIOS[scenarioId] ?? SCENARIOS[DEFAULT_SCENARIO_ID];
 
     const heightmap = generateHeightmap(rng);
     const fuelGrid = generateFuelGrid(heightmap, rng);
@@ -30,7 +41,7 @@ export const ScenarioBuilder = {
     const populations = generatePopulations(nodes, rng);
     const shelters = pickShelters(nodes, populations);
     const zones = defineZones(populations);
-    const ignition = pickIgnition(heightmap, fuelGrid, rng);
+    const ignition = preset.ignition || pickIgnition(heightmap, fuelGrid, rng);
 
     // Sanity: every population node must reach at least one shelter via the
     // road graph. This is a hidden check that runs at scenario build time.
@@ -41,6 +52,8 @@ export const ScenarioBuilder = {
 
     return {
       seed,
+      scenarioId: preset.id,
+      scenarioName: preset.name,
       name: 'Cedar Corridor — San Diego County',
       gridSize: GRID,
       worldMeters: WORLD_M,

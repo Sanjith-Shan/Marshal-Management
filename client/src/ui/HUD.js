@@ -49,6 +49,35 @@ export class HUD {
     this.fireBadge = null;
     this._modeToastTimer = null;
     this._modeToast = this._buildModeToast();
+
+    this.scenarioPicker = document.getElementById('scenario-picker');
+    this._wireScenarioPicker();
+  }
+
+  async _wireScenarioPicker() {
+    if (!this.scenarioPicker) return;
+    try {
+      const res = await fetch('/api/scenarios');
+      const data = await res.json();
+      this.scenarioPicker.innerHTML = data.available
+        .map(s => `<option value="${s.id}">${s.name}</option>`)
+        .join('');
+      if (data.current) this.scenarioPicker.value = data.current;
+      this.scenarioPicker.addEventListener('change', () => {
+        this.socket.emit('action', {
+          type: 'reset',
+          payload: { scenarioId: this.scenarioPicker.value }
+        });
+      });
+    } catch (err) {
+      console.warn('[hud] scenario list fetch failed:', err.message);
+    }
+  }
+
+  setScenario(id) {
+    if (this.scenarioPicker && id && this.scenarioPicker.value !== id) {
+      this.scenarioPicker.value = id;
+    }
   }
 
   _buildModeToast() {

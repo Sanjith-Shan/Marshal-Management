@@ -64,11 +64,12 @@ class App {
     this.socket.on('disconnect', () => this.hud.setConnection(false));
 
     this.socket.on('scenario', (scn) => {
-      console.log('[scenario] received', scn.name, scn.nodes.length + ' nodes', scn.edges.length + ' edges');
+      console.log('[scenario] received', scn.scenarioName || scn.name, scn.nodes.length + ' nodes', scn.edges.length + ' edges');
       this.scenario = scn;
       this.caRing = [];
       this._lastCaSnapMin = -Infinity;
       this._buildWorld();
+      if (scn.scenarioId) this.hud.setScenario(scn.scenarioId);
     });
 
     this.socket.on('snapshot', (snap) => {
