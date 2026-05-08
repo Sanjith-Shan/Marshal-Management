@@ -14,6 +14,7 @@ import { BottleneckMarker } from './evacuation/BottleneckMarker.js';
 import { ShelterMarker } from './evacuation/ShelterMarker.js';
 import { PopulationDots } from './evacuation/PopulationDots.js';
 import { ContraflowAnimator } from './evacuation/ContraflowAnimator.js';
+import { ProactiveOverlay } from './evacuation/ProactiveOverlay.js';
 import { PanelManager } from './panels/PanelManager.js';
 import { VoiceInput } from './interaction/VoiceInput.js';
 import { Keybindings } from './interaction/Keybindings.js';
@@ -46,6 +47,7 @@ class App {
     this.shelters = null;
     this.populations = null;
     this.contraflow = null;
+    this.proactive = null;
 
     this._currentMode = 'MONITOR';
 
@@ -144,7 +146,10 @@ class App {
       this._applyEvacuationToScene(this.snapshot);
     });
 
-    this.socket.on('advisor', (msg) => this.panels.appendAdvisor(msg));
+    this.socket.on('advisor', (msg) => {
+      this.panels.appendAdvisor(msg);
+      if (this.proactive) this.proactive.notify(msg);
+    });
     this.socket.on('fire', (f) => this.hud.setFire(f));
 
     this.socket.on('edge:update', (u) => {
@@ -245,6 +250,9 @@ class App {
 
     this.contraflow = new ContraflowAnimator(this.scenario, this.terrain);
     sg.add(this.contraflow.group);
+
+    this.proactive = new ProactiveOverlay(this.scenario, this.terrain);
+    sg.add(this.proactive.group);
 
     this.fireCA = new CellularAutomata(this.scenario);
     this.fireOverlay = new FireOverlay(this.scenario, this.terrain, this.fireCA);
@@ -361,6 +369,7 @@ class App {
     if (this.bottlenecks) this.bottlenecks.update(dt, this.scene.camera);
     if (this.zones) this.zones.update(dt);
     if (this.contraflow) this.contraflow.update(dt);
+    if (this.proactive) this.proactive.update(dt, this.scene.camera);
     this.scene.update(dt);
     this.scene.renderer.render(this.scene.scene, this.scene.camera);
   }

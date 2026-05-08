@@ -3,6 +3,36 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 5
+
+**Demo scenario library + picker, contraflow animation, AI terrain overlays.** Three commits, gates green throughout.
+
+**1. Demo scenarios (commit `4faee34`):**
+   - `ScenarioBuilder` exports `SCENARIOS` dict with three named presets sharing seed 42 (same Cedar Corridor map) but distinct ignition points: Cedar Fire (NE, default), Witch Creek (far east), Plumas Approach (west). `build({ scenarioId })` overrides the picked ignition.
+   - `GET /api/scenarios` returns the available list + currently-loaded id.
+   - Reset action accepts `payload.scenarioId`.
+   - `<select id="scenario-picker">` in the HUD bottom strip; `_wireScenarioPicker` fetches the list on boot, syncs on `scenario` socket event, emits `reset` action with new id on change.
+   - Closes BUILD_LOG #21 (reset only re-seeded same scenario; no scenario picker).
+
+**2. Contraflow animation (commit `1b535d5`):**
+   - New `client/src/evacuation/ContraflowAnimator.js`. Owns one `Points` cloud per contraflowing edge: 6 cyan particles riding a phase from u→v at 0.45 units/s. Communicates direction of mandatory outbound flow.
+   - `applySnapshot(snap)` adds/removes per-edge entries based on `snap.edgeContraflowIds`.
+   - `setEvacMode(active)` boosts particle size + opacity in EVACUATE.
+   - Closes BUILD_LOG #9 (contraflow had no animated visual, color-flip only).
+
+**3. AI proactive terrain overlays (this commit):**
+   - `AIAdvisor.proactiveScan` now adds `zoneName: z.name` to each issue object.
+   - New `client/src/evacuation/ProactiveOverlay.js`. Pre-computes per-zone centroids. On every `advisor` socket event, calls `notify(msg)`; if msg has `zoneName` and severity is `warn`/`crit`, hovers a canvas-textured warning triangle (`!` symbol) above that zone's centroid for 8 s with pulse + bob + fade-in/fade-out, billboarded toward camera.
+   - Replaces existing marker for the same zone (refresh, not stack).
+   - Auto-cleanup of geometry / texture / material on expiry.
+   - Closes BUILD_LOG #13/#16 (proactive AI only updated panel; nothing on terrain).
+
+**Verification.** `npm run build` clean. `node server/_selftest.js` 25/25. `node server/_e2e.js` 14/14.
+
+**Still open from audit:** AR / Quest 3 / HTTPS, hardware UNO physical end-to-end, 30-min / 1-hr fire projection ghost layer, real LANDFIRE / 3DEP data swap-in, mode-switch hardware "hold = ±60". Real-data swap-in is documented in the README and v3 spec — engine accepts it without code changes.
+
+---
+
 ## 2026-05-08 — session 4
 
 **Mode-switch UX overhaul + EVACUATE visual overlay.** Two commits, gates green throughout.
@@ -271,11 +301,11 @@ arduino/ marshal_board.ino firmware
 
 7. No 30-min / 1-hr fire projection layer. **(Addressed 2026-05-08 sessions 2+3:** time-jump `[`/`]` + HUD buttons + scrubber all drive real `time-jump` actions. `T` scrubber now syncs to server clock and emits `time-jump` on drag. True "preview without commit" is deferred.**)**
 8. ~~Engine produces only primary route; no secondary/alternate.~~ **Closed 2026-05-08 session 3.** `secondaryEdgeIds` returned per zone, rendered in dimmer green.
-9. Contraflow has no animated visual (color flip only).
+9. ~~Contraflow has no animated visual (color flip only).~~ **Closed 2026-05-08 session 5.** New `ContraflowAnimator` flows 6 cyan particles per contra edge from u→v at 0.45 u/s, brighter in EVACUATE.
 10. ~~Blocked roads turn red but don't show pulsing X markers.~~ **Closed 2026-05-08 session 3.** Pulsing crossed-bar markers added to `RoadRenderer`.
 11. ~~Mode switch is ~cosmetic (only COMMAND has behavior).~~ **Closed 2026-05-08 session 4.** Mode toast fires on every mode change; cursor affordance + road hover highlight in COMMAND; EVACUATE auto-opens evac panel and applies a global visual overlay (fire dims to 22%, evac layer brightens, route particles 1.8× size, etc.). All renderers expose `setEvacMode(active)`.
 12. `data/demo-scenarios/` is empty. No saved Cedar Fire scenario states.
-13. Proactive AI only updates the panel — no terrain overlays.
+13. ~~Proactive AI only updates the panel — no terrain overlays.~~ **Closed 2026-05-08 session 5.** New `ProactiveOverlay` hovers an 8-second pulsing warning triangle above the named zone whenever a `warn`/`crit` advisor message lands.
 14. Performance on Quest 3 untested. May need 64×64 CA fallback.
 
 **Stretch (spec stretch goals or polish):**
@@ -286,7 +316,7 @@ arduino/ marshal_board.ino firmware
 18. Sound design — alarms, click feedback, radio chatter.
 19. Bottleneck markers don't show capacity %, hwy class, or alt routes.
 20. Shelter overflow has no UI signal.
-21. Reset only re-seeds the same scenario; no scenario picker.
+21. ~~Reset only re-seeds the same scenario; no scenario picker.~~ **Closed 2026-05-08 session 5.** Three named scenarios with distinct ignition points; `<select>` in HUD bottom strip emits `reset { scenarioId }`.
 
 ### TODO group H — time-control buttons + UNO Q migration *(supersedes / refines item 7 above and the Hardware row in §"Known mocks")*
 

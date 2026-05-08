@@ -174,25 +174,27 @@ export class AIAdvisor {
 
   async proactiveScan() {
     const s = this.state;
-    // Auto-detect notable conditions and surface a warning.
     const issues = [];
     for (const z of s.evacuation.zones) {
       if (z.level === 3 && (z.evacuatedPct || 0) < 50 && z.etaMin <= 30) {
         issues.push({
           severity: 'crit',
           source: 'proactive',
+          zoneName: z.name,
           text: `${z.name} is at LEVEL 3 GO with only ${z.evacuatedPct || 0}% evacuated and fire ETA ${z.etaMin} min. Consider contraflow on primary route.`
         });
       } else if (z.level === 2 && z.marginMin < 20 && z.marginMin >= 0) {
         issues.push({
           severity: 'warn',
           source: 'proactive',
+          zoneName: z.name,
           text: `${z.name} safety margin is ${z.marginMin} min — recommend upgrade to LEVEL 3 GO within 5 min.`
         });
       } else if (z.bottleneck && z.bottleneck.ratio > 100) {
         issues.push({
           severity: 'warn',
           source: 'proactive',
+          zoneName: z.name,
           text: `${z.name} primary route is over-capacity (${z.bottleneck.ratio}%). Suggest splitting flow to alternate.`
         });
       }
