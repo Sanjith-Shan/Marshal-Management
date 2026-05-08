@@ -8,6 +8,8 @@
 //   R      reset scenario
 //   Space  push-to-talk (hold)
 //   T      toggle timeline scrubber
+//   ]      jump sim time +30 min   (Shift+] = +60 min)
+//   [      jump sim time -30 min   (Shift+[ = -60 min)
 //   ?      help overlay
 
 export class Keybindings {
@@ -49,6 +51,18 @@ export class Keybindings {
         break;
       case 'KeyT':
         this.hud.toggleTimeline(); break;
+      case 'BracketRight':
+        this.socket.emit('action', {
+          type: 'time-jump',
+          payload: { deltaMin: e.shiftKey ? 60 : 30 }
+        });
+        break;
+      case 'BracketLeft':
+        this.socket.emit('action', {
+          type: 'time-jump',
+          payload: { deltaMin: e.shiftKey ? -60 : -30 }
+        });
+        break;
       case 'Space':
         if (!this._pttHeld) {
           this._pttHeld = true;

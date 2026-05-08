@@ -176,6 +176,8 @@ html, body, #app {
 .ctl-ptt.active { background: rgba(255, 95, 95, 0.25); border-color: var(--accent-hot); color: var(--accent-hot); }
 .ctl-mode { color: var(--accent-warm); }
 .ctl-reset { color: var(--text-dim); }
+.ctl-time { color: var(--accent); letter-spacing: 0.04em; }
+.ctl-time:hover { background: rgba(120, 200, 255, 0.12); border-color: var(--accent); }
 .ctl-sep { width: 1px; align-self: stretch; background: var(--glass-border); margin: 0 4px; }
 kbd {
   font-family: ui-monospace, 'SF Mono', monospace;

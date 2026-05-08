@@ -203,6 +203,47 @@ export class CellularAutomata {
     return { burning, burned, perimeter };
   }
 
+  // Capture full simulation state into a transferable snapshot. Used by the
+  // time-jump system: forward jumps don't need this, but backward jumps
+  // restore from the closest snapshot taken before the target sim-min.
+  snapshot() {
+    return {
+      simMinutes: this.simMinutes,
+      stepCount: this.stepCount,
+      windDeg: this.windDeg,
+      windKph: this.windKph,
+      state: new Uint8Array(this.state),
+      arrival: new Float32Array(this.arrival),
+      burnTime: new Uint16Array(this.burnTime)
+    };
+  }
+
+  restore(snap) {
+    if (!snap) return;
+    this.simMinutes = snap.simMinutes;
+    this.stepCount = snap.stepCount;
+    this.windDeg = snap.windDeg;
+    this.windKph = snap.windKph;
+    this.state = new Uint8Array(snap.state);
+    this.arrival = new Float32Array(snap.arrival);
+    this.burnTime = new Uint16Array(snap.burnTime);
+    this.tickAccum = 0;
+  }
+
+  // Run N CA steps immediately, bypassing the wall-clock rate limit. Used by
+  // the time-jump-forward action so the user can preview the fire 30 / 60
+  // minutes ahead without waiting in real time.
+  fastForward(steps) {
+    const n = Math.max(0, Math.floor(steps));
+    for (let i = 0; i < n; i++) {
+      this._stepOnce();
+      this.stepCount++;
+      this.simMinutes += 0.5;
+    }
+    if (this.onUpdate && n > 0) this.onUpdate(this.stats());
+    return n;
+  }
+
   // For each road node, return arrival minutes (or large number if never).
   // The server uses this to remove edges from the graph as fire arrives.
   arrivalByNode(nodes) {

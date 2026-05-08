@@ -23,6 +23,18 @@ export class HUD {
       this.socket.emit('action', { type: 'reset' });
     });
     document.getElementById('btn-mode').addEventListener('click', () => this.cycleMode());
+    document.getElementById('btn-time-fwd').addEventListener('click', (e) => {
+      this.socket.emit('action', {
+        type: 'time-jump',
+        payload: { deltaMin: e.shiftKey ? 60 : 30 }
+      });
+    });
+    document.getElementById('btn-time-back').addEventListener('click', (e) => {
+      this.socket.emit('action', {
+        type: 'time-jump',
+        payload: { deltaMin: e.shiftKey ? -60 : -30 }
+      });
+    });
 
     this.timelineSlider.addEventListener('input', () => {
       const v = parseInt(this.timelineSlider.value, 10);

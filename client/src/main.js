@@ -26,6 +26,14 @@ class App {
     this.scenario = null;
     this.snapshot = null;
 
+    // Client-side CA snapshot ring for time-jump rewind. Cadence and depth
+    // mirror the server's snapshot ring so a rewind landing on a server snap
+    // can find a matching CA snap most of the time.
+    this.caRing = [];
+    this._lastCaSnapMin = -Infinity;
+    this.CA_SNAP_INTERVAL_MIN = 5;
+    this.CA_RING_MAX = 24;
+
     this.scene = new SceneRoot();
     this.terrain = null;
     this.fireCA = null;
@@ -56,6 +64,8 @@ class App {
     this.socket.on('scenario', (scn) => {
       console.log('[scenario] received', scn.name, scn.nodes.length + ' nodes', scn.edges.length + ' edges');
       this.scenario = scn;
+      this.caRing = [];
+      this._lastCaSnapMin = -Infinity;
       this._buildWorld();
     });
 
@@ -69,6 +79,46 @@ class App {
 
     this.socket.on('tick', ({ simTimeMin }) => {
       this.hud.setSimTime(simTimeMin);
+      this._maybeSnapCA(simTimeMin);
+    });
+
+    this.socket.on('time-fast-forward', ({ steps, targetMin }) => {
+      if (!this.fireCA) return;
+      this.fireCA.fastForward(steps);
+      const arrival = this.fireCA.arrivalByNode(this.scenario.nodes);
+      const stats = this.fireCA.stats();
+      this.socket.emit('time-jump:applied', {
+        targetMin,
+        arrivalByNode: arrival,
+        fire: {
+          burningCells: stats.burning,
+          perimeterCells: stats.perimeter,
+          burnedCells: stats.burned,
+          arrivalByNode: arrival
+        }
+      });
+      // Take an immediate CA snapshot at the new time so a follow-up rewind
+      // can return here.
+      this._maybeSnapCA(targetMin, true);
+      if (this.fireOverlay) this.fireOverlay.update(0);
+    });
+
+    this.socket.on('time-rewind', ({ targetMin }) => {
+      if (!this.fireCA) return;
+      const entry = this._findCaSnap(targetMin);
+      if (entry) {
+        this.fireCA.restore(entry.snap);
+      } else {
+        // No local snapshot — rebuild a fresh CA. Loses fire state, but the
+        // rest of the scene reconciles when the next snapshot broadcast lands.
+        this.fireCA = new CellularAutomata(this.scenario);
+        if (this.fireOverlay) this.fireOverlay.ca = this.fireCA;
+        this._wireFireCAUpdates();
+      }
+      // After-target snapshots are now alternate futures — discard.
+      this.caRing = this.caRing.filter(e => e.simMin <= targetMin);
+      this._lastCaSnapMin = entry ? entry.simMin : -Infinity;
+      if (this.fireOverlay) this.fireOverlay.update(0);
     });
 
     this.socket.on('weather', (w) => {
@@ -141,7 +191,13 @@ class App {
     this.fireOverlay = new FireOverlay(this.scenario, this.terrain, this.fireCA);
     sg.add(this.fireOverlay.mesh);
 
-    // Link CA → server-side fire arrival map (for evac routing)
+    this._wireFireCAUpdates();
+
+    if (this.snapshot) this._applyEvacuationToScene(this.snapshot);
+  }
+
+  _wireFireCAUpdates() {
+    if (!this.fireCA) return;
     this.fireCA.onUpdate = (stats) => {
       this.socket.emit('fire:state', {
         burningCells: stats.burning,
@@ -150,8 +206,22 @@ class App {
         arrivalByNode: this.fireCA.arrivalByNode(this.scenario.nodes)
       });
     };
+  }
 
-    if (this.snapshot) this._applyEvacuationToScene(this.snapshot);
+  _maybeSnapCA(simMin, force = false) {
+    if (!this.fireCA) return;
+    if (!force && simMin - this._lastCaSnapMin < this.CA_SNAP_INTERVAL_MIN) return;
+    this._lastCaSnapMin = simMin;
+    this.caRing.push({ simMin, snap: this.fireCA.snapshot() });
+    while (this.caRing.length > this.CA_RING_MAX) this.caRing.shift();
+  }
+
+  _findCaSnap(targetMin) {
+    let best = null;
+    for (const e of this.caRing) {
+      if (e.simMin <= targetMin && (!best || e.simMin > best.simMin)) best = e;
+    }
+    return best;
   }
 
   _applyEvacuationToScene(snap) {
