@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+.DS_Store
+*.log
+.vite/
+.cache/
+
+# editor / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# build artifacts not committed
+client/dist/
