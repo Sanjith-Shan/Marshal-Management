@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marshal Management — AR Fire Command</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="three-canvas"></canvas>
+
+      <div id="hud">
+        <div id="hud-top-left">
+          <div class="brand">
+            <span class="brand-mark">▲</span>
+            <span class="brand-text">MARSHAL MANAGEMENT</span>
+            <span class="brand-sub">v3 · Reboot the Earth 2026</span>
+          </div>
+          <div id="status-bar">
+            <span class="status-dot" id="conn-dot"></span>
+            <span id="conn-label">connecting…</span>
+            <span class="sep">·</span>
+            <span id="mode-label">MONITOR</span>
+            <span class="sep">·</span>
+            <span id="time-label">T+00:00</span>
+          </div>
+        </div>
+
+        <div id="hud-top-right">
+          <button class="hud-btn" id="btn-xr" title="Enter immersive AR (Quest 3)">
+            <span class="hud-btn-key">XR</span>
+            <span>Enter AR</span>
+          </button>
+          <button class="hud-btn" id="btn-help" title="Show keyboard shortcuts">
+            <span class="hud-btn-key">?</span>
+            <span>Controls</span>
+          </button>
+        </div>
+
+        <div id="hud-bottom">
+          <div class="control-strip">
+            <button class="ctl ctl-panel" data-panel="weather"><kbd>1</kbd> Weather</button>
+            <button class="ctl ctl-panel" data-panel="evacuation"><kbd>2</kbd> Evac</button>
+            <button class="ctl ctl-panel" data-panel="advisor"><kbd>3</kbd> AI</button>
+            <button class="ctl ctl-panel" data-panel="video"><kbd>4</kbd> Video</button>
+            <span class="ctl-sep"></span>
+            <button class="ctl ctl-mode" id="btn-mode"><kbd>M</kbd> Mode</button>
+            <button class="ctl ctl-evacuate" id="btn-evacuate"><kbd>E</kbd> EVACUATE</button>
+            <button class="ctl ctl-ptt" id="btn-ptt"><kbd>Space</kbd> Hold to Talk</button>
+            <button class="ctl ctl-reset" id="btn-reset"><kbd>R</kbd> Reset</button>
+          </div>
+        </div>
+
+        <div id="panels-layer"></div>
+
+        <div id="help-overlay" class="hidden">
+          <div class="help-card">
+            <h2>Marshal Command Controls</h2>
+            <div class="help-grid">
+              <div><kbd>1</kbd>–<kbd>4</kbd></div><div>Toggle floating panels</div>
+              <div><kbd>WASD</kbd> / Mouse drag</div><div>Rotate &amp; pan terrain</div>
+              <div><kbd>Q</kbd> / <kbd>Z</kbd></div><div>Zoom in / out</div>
+              <div><kbd>Space</kbd> (hold)</div><div>Push-to-talk to AI advisor</div>
+              <div><kbd>E</kbd></div><div>Trigger evacuation engine</div>
+              <div><kbd>M</kbd></div><div>Cycle Monitor / Command / Evacuate mode</div>
+              <div><kbd>R</kbd></div><div>Reset scenario</div>
+              <div><kbd>T</kbd></div><div>Toggle timeline scrubber</div>
+              <div>Click road</div><div>(Command mode) toggle blocked</div>
+            </div>
+            <button class="help-close" id="help-close">Close</button>
+          </div>
+        </div>
+
+        <div id="ptt-toast" class="hidden">
+          <div class="ptt-toast-inner">
+            <span class="ptt-pulse"></span>
+            <span id="ptt-text">Listening…</span>
+          </div>
+        </div>
+
+        <div id="timeline" class="hidden">
+          <label>Timeline (minutes from now)</label>
+          <input type="range" id="timeline-slider" min="0" max="180" value="0" step="5" />
+          <span id="timeline-value">+0 min</span>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
