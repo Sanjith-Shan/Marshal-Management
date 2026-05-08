@@ -3,6 +3,46 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 4
+
+**Mode-switch UX overhaul + EVACUATE visual overlay.** Two commits, gates green throughout.
+
+**Mode-switch UX (commit `9cd882f`):**
+
+- **Drag → click conflict fix.** `DesktopControls` now tracks `_dragPixels` across `mousedown/mousemove`; resets on `mousedown`. `_handleCanvasClick` checks `desktop.hasDragged` (`_dragPixels > 5`) and returns early. **Camera rotation no longer accidentally blocks roads in COMMAND mode** — was the most-likely "errors interacting with the 3D map" complaint.
+- **Mode toast.** New `HUD.showModeToast(mode)` creates a `#mode-toast` element with auto-dismiss after 2.5s. Fires on every `mode` socket event so hardware-board changes also surface. Descriptions: "Monitor Mode — observation only" / "Command Mode — click roads to block · voice commands active" / "Evacuation Mode — routing panel open · press E to recompute". Border + text color matches the mode label color.
+- **Cursor affordance.** Canvas cursor is `crosshair` in COMMAND, `default` otherwise. In COMMAND mode, hovering a road switches cursor to `pointer`.
+- **Road hover highlight.** New `mousemove` listener on the canvas raycasts the pick proxy in COMMAND mode and calls `RoadRenderer.setHover(edgeId)`. Hovered edge gets warm-yellow vertex colors. `RoadRenderer` now tracks `_primarySet` / `_secondarySet` so unhover restores the correct logical color (blocked / contra / primary / secondary / original).
+- **EVACUATE auto-opens evac panel.** On entering EVACUATE, `_onModeChange` checks `snapshot.panels.evacuation` and emits a `panel` action to open it if closed.
+
+**EVACUATE visual overlay (commit `1a3841d`):**
+
+Every renderer now exposes `setEvacMode(active)`. `_onModeChange` in `main.js` fans it out to fire / roads / zones / routes / bottlenecks / shelters / populations on every mode change.
+
+| Layer | Normal | Evacuate mode | How |
+|---|---|---|---|
+| Fire overlay | full | 22% opacity | `uFade` shader uniform, lerped 4×/s in update() |
+| Road network | 0.85 opacity | 0.12 opacity | `material.opacity` lerped 5×/s |
+| Highway tubes | 0.55 opacity | 0.08 opacity | per-mesh material.opacity |
+| Zone fill (L3 GO) | 0.34 | 0.58 | reapply applySnapshot with `_evacMode` flag |
+| Zone outline pulse | 600ms period | 400ms period | faster + higher base opacity |
+| Route particles | base | size ×1.8, opacity 1.0, speed ×1.5 | applied at material level + speed mult in update |
+| Bottleneck rings | base | scale ×1.4, period 250ms, opacity 0.75+ | check `_evacMode` in update |
+| Shelter diamonds | emissive 0.6 | emissive 1.4, scale 1.45 | direct material assignment |
+| Population dots | size 0.022, base flow | size 0.032, flow ×1.6 | material size + boost in update |
+
+The fire CA still steps; every burning cell still visible. The evacuation geometry is now unambiguously the primary read.
+
+**Convention added.** Renderers should expose `setEvacMode(active)`. Smooth fades preferred over instant switches — store a `_target*` value and lerp in `update(dt)`. Existing examples: `FireOverlay.uFade`, `RoadRenderer._targetRoadOpacity`.
+
+**Verification.** `npm run build` clean (~593 kB gzipped 155 kB). `node server/_selftest.js` 25/25. `node server/_e2e.js` 14/14.
+
+**Closes:** mode-switch behavior gap (audit Tier-1 #10), drag-click 3D-map interaction error, BUILD_LOG #11 (mode switch was cosmetic).
+
+**Still open from audit:** AR / Quest 3 / HTTPS, hardware UNO physical end-to-end, demo scenario library, AI proactive overlays on terrain, 30-min / 1-hr fire projection ghost layer, contraflow animated visual.
+
+---
+
 ## 2026-05-08 — session 3
 
 **Full project audit + 7-bug fix batch + Tier-2 polish.** All changes desktop-testable; XR path untouched. Three commits, gates green throughout (selftest 25/25, e2e 14/14, build clean).
@@ -183,7 +223,7 @@ arduino/ marshal_board.ino firmware
 | 3. Evacuation Planning System | 🟢 / 🟡 | Engine is real (Dijkstra + BPR + capacity-aware multi-source). Operates on a **synthetic road network**. Only primary route computed (no secondary/alternate). |
 | 4. Floating AR Information Panels | 🟡 | Real and styled — but **DOM, not 3D Three.js planes**. In Quest passthrough they may not appear at all. |
 | 5. AI Strategic Advisor | 🟢 | Gemini path real if key set. **AI now mutates state** via `parseIntents` ("Upgrade Zone B to GO", "Block SR-67", "Enable contraflow on I-15") → real `override-zone` / `block-road` / `contraflow` actions through the same dispatcher as keyboard / hardware. **Voice output** via Web SpeechSynthesis (panel toggle). Proactive scan still only writes to panel, not terrain overlays — but now also kicks on time-jump ≥ 30 min. |
-| 6. Voice + Hand + Hardware Control | 🟡 | Voice input + keyboard fallback work; voice now triggers state-mutating actions (override-zone, block-road, contraflow). **Hand tracking 0% implemented.** Gesture detection 0%. Hardware firmware written but **never validated on physical UNO**. |
+| 6. Voice + Hand + Hardware Control | 🟡 | Voice input + keyboard fallback work; voice now triggers state-mutating actions (override-zone, block-road, contraflow). **Hand tracking 0% implemented.** Gesture detection 0%. Hardware firmware written but **never validated on physical UNO**. Joystick events broadcast and consumed (session 3 BUG-2 fix), so a connected board would actually rotate the map. |
 | 7. Live Data Feeds | 🟡 | NWS weather is **real**. Everything else (FIRMS / 3DEP / LANDFIRE / OSM / Census) is procedural or stubbed. |
 
 ## Run modes confirmed
@@ -233,7 +273,7 @@ arduino/ marshal_board.ino firmware
 8. ~~Engine produces only primary route; no secondary/alternate.~~ **Closed 2026-05-08 session 3.** `secondaryEdgeIds` returned per zone, rendered in dimmer green.
 9. Contraflow has no animated visual (color flip only).
 10. ~~Blocked roads turn red but don't show pulsing X markers.~~ **Closed 2026-05-08 session 3.** Pulsing crossed-bar markers added to `RoadRenderer`.
-11. Mode switch is ~cosmetic (only COMMAND has behavior).
+11. ~~Mode switch is ~cosmetic (only COMMAND has behavior).~~ **Closed 2026-05-08 session 4.** Mode toast fires on every mode change; cursor affordance + road hover highlight in COMMAND; EVACUATE auto-opens evac panel and applies a global visual overlay (fire dims to 22%, evac layer brightens, route particles 1.8× size, etc.). All renderers expose `setEvacMode(active)`.
 12. `data/demo-scenarios/` is empty. No saved Cedar Fire scenario states.
 13. Proactive AI only updates the panel — no terrain overlays.
 14. Performance on Quest 3 untested. May need 64×64 CA fallback.

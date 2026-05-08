@@ -37,12 +37,19 @@ Wire the Arduino as documented in `arduino/marshal_board/marshal_board.ino` and 
 | Wheel / Q / Z | Zoom in / out |
 | **1 – 4** | Toggle panels: Weather / Evacuation / AI / Video |
 | **E** | EVACUATE — run the routing engine |
-| **M** | Cycle mode: Monitor / Command / Evacuate |
+| **M** | Cycle mode: Monitor → Command → Evacuate |
 | **R** | Reset scenario |
 | **Space** (hold) | Push-to-talk to AI advisor |
 | **T** | Toggle timeline scrubber |
+| **[** / **]** | Time-jump ±30 min (Shift = ±60) |
 | **?** | Show help overlay |
 | Click road in Command mode | Toggle blocked |
+
+### Mode behavior
+
+- **Monitor** — passive observation. Default cursor, no terrain interaction.
+- **Command** — `crosshair` cursor; hover roads to highlight; click to block / unblock. Voice intents like "Block I-15" / "Upgrade Poway to GO" mutate state.
+- **Evacuate** — auto-opens the Evacuation panel; fire overlay dims; routes, zones, dots, shelters, bottlenecks all brighten as the foregrounded layer.
 
 ## What's running where
 
