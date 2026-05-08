@@ -35,7 +35,7 @@ server/                    Node + Express + Socket.IO backend
     rng.js                 Mulberry32 seedable PRNG
   _selftest.js             Hidden scenario + evac + AI smoke test
   _e2e.js                  Hidden socket round-trip test (boots server on :3001)
-arduino/marshal_board/     Firmware for the optional Arduino UNO board
+arduino/marshal_board/     Firmware for classic UNO + USB serial (reference path; see BUILD_LOG TODO group H — production target is UNO Q over wireless via Arduino App Lab)
 data/demo-scenarios/       Reserved for saved demo states
 ```
 
@@ -58,7 +58,7 @@ Optional env (`.env`, see `.env.example`):
 - `DISABLE_ARDUINO=1` — skip serial autodetect entirely
 - `PORT` — server port (default 3000)
 
-Arduino: open `arduino/marshal_board/marshal_board.ino` in Arduino IDE, upload to UNO, plug in via USB. Server auto-detects on next start. Wiring documented in the .ino header.
+Arduino: the existing `arduino/marshal_board/marshal_board.ino` targets **classic UNO + Arduino IDE + USB serial** and is the working reference. The **production target is Arduino UNO Q** (wireless, battery-powered, Arduino App Lab) — see `BUILD_LOG.md` TODO group H for the planned migration. Don't delete the classic-UNO sketch; the new wireless path will mirror its action protocol.
 
 ## Conventions
 

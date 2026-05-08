@@ -100,7 +100,7 @@ arduino/ marshal_board.ino firmware
 | Gemini AI | Mock by default; real if key set | Set `GEMINI_API_KEY` | Free tier exists |
 | Voice output | **Missing** | Web SpeechSynthesis (free, ~5 lines) or ElevenLabs (paid) | None for SpeechSynthesis |
 | Video feeds | Procedural canvas animations | ALERTWildfire.org embeds, or local MP4s | Free |
-| Hardware board | Firmware exists, untested on real UNO | Physical wiring per spec parts list | ~$30 components |
+| Hardware board | Firmware exists for **classic UNO over USB serial**; **target is actually Arduino UNO Q over wireless** (see TODO group H below). Existing `marshal_board.ino` and `ArduinoService.js` will need a parallel UNO Q path, not deletion. | Physical UNO Q + parts list; Arduino App Lab (web IDE) instead of Arduino IDE | ~$70 UNO Q + portable battery (user has) |
 
 ## Known gaps and v2 priorities
 
@@ -136,6 +136,27 @@ arduino/ marshal_board.ino firmware
 20. Shelter overflow has no UI signal.
 21. Reset only re-seeds the same scenario; no scenario picker.
 
+### TODO group H — time-control buttons + UNO Q migration *(supersedes / refines item 7 above and the Hardware row in §"Known mocks")*
+
+> User-requested addition. Two physical buttons on the hardware board for jumping the simulation forward/back in time, **plus a platform migration** of the entire hardware integration from classic UNO + USB serial to Arduino UNO Q + wireless. The two are bundled here because both touch firmware and `ArduinoService.js`, and doing them together avoids two firmware rewrites.
+
+**H1 — Two new hardware controls.** Forward (`TIME_FWD`) and back (`TIME_BACK`) buttons. Forward jumps `simTimeMin` by +30 / +60 min (single press / hold), fast-forwards the fire CA the equivalent number of steps, and re-runs `EvacuationEngine` so zones / routes / bottlenecks reflect the new state. Back rewinds by the same step. This refines and replaces the currently-decorative timeline scrubber (Medium gap #7).
+
+**H2 — Server-side time-jump API.** New `socket.emit('action', { type: 'time-jump', payload: { deltaMin: +30 } })`. Server: advance `state.simTimeMin`, ask the client CA to fast-step to match (or run a server-side mirror CA), recompute evacuation, broadcast snapshot.
+
+**H3 — Reverse time is non-trivial.** The fire CA is forward-only / non-reversible. Pick one of two strategies (decision deferred — see open question below):
+  - **Snapshot ring buffer:** every 5 sim-min, push `{ fire.state, fire.arrival, weather, evacuation }` onto a circular buffer (e.g. 24 entries = 2 hr of history). Back-button restores from the closest snapshot.
+  - **Deterministic re-sim:** seed the CA's `Math.random()` from the scenario seed + step index, and re-simulate from t=0 to `target` on rewind. Slower but uses no extra memory and gives bit-identical replay.
+
+**H4 — Migrate firmware target to Arduino UNO Q.** Existing `arduino/marshal_board/marshal_board.ino` is for classic UNO + Arduino IDE. UNO Q uses **Arduino App Lab** (web IDE, different sketch conventions, can leverage onboard MPU/Linux side). Add `arduino/marshal_board_q/` as the new authoring location. **Keep the classic UNO sketch as a reference** — don't delete; it's a working CSV protocol the wireless path can mirror.
+
+**H5 — Drop USB serial; move to wireless.** UNO Q has WiFi / BLE built in and will be powered by a portable battery, untethered. Replace `ArduinoService.js`'s `serialport` reader with a network endpoint:
+  - Recommended: UNO Q runs a WebSocket *client* and connects to the server's existing Socket.IO (or a dedicated `/board` namespace), POSTs button events as the same `{ type, payload }` action shape the keyboard fallback uses.
+  - Alternatives: MQTT broker (extra moving part); HTTP POST per event (chatty but simple); BLE (only if the server host is also a BLE peripheral, which complicates deployment).
+  - Existing `ArduinoService.js` should stay as a fallback path (USB still works for development on a laptop) but the production target is the WiFi path.
+
+**H6 — Pairing / discovery UX.** Without USB autodetect, the user needs a way to connect the board to the running server. Likely: server prints a join URL or 6-digit code at startup; UNO Q prompts (or is pre-configured) with WiFi SSID + server URL.
+
 ## Open questions (for future sessions to interpret)
 
 > These are things the prior session **wasn't sure about** rather than things it already concluded. Treat each as a starting point, not an answer. Add to this list as you find new ones.
@@ -151,6 +172,12 @@ arduino/ marshal_board.ino firmware
 - The "evacuated %" is a wall-clock-since-evac-trigger linear ramp — not a real flow simulation. Looks fine but is fake. Keep or replace?
 - The `simTimeMin` clock advances independently of fire-CA stepping. They should probably be coupled. Are they drifting apart in long sessions?
 - Does the AR session correctly destroy itself / restore desktop on `session.end()`? Path is written but never exercised.
+- (H3) For time-rewind: snapshot ring buffer vs deterministic re-sim — which is right? Snapshot is faster and simpler; re-sim gives bit-identical replay and pairs naturally with multi-user (stretch goal #15). Decide before building H1.
+- (H4) Does Arduino App Lab support standard `.ino`-style sketches, or does it require a different project layout / build manifest? Confirm before porting.
+- (H5) Is the WiFi / WebSocket round-trip fast enough for the joystick (~30 Hz)? Buttons are edge-triggered so latency tolerance is high, but joystick streaming may need throttling or a different transport.
+- (H5) If the UNO Q drops WiFi mid-demo, what's the failure UX? Currently nothing — keyboard fallback masks it but there's no visible "board offline" indicator.
+- (H1) Should "forward 30 min" advance the *whole* sim (clock + fire + weather + evac), or just the fire-projection visualization layer? The first is honest, the second is faster but means the rewound state is fake. Spec language ("see the fire spread in 30 minutes") suggests the first.
+- (H1) On forward-jump, does the AI advisor's proactive scan also re-run, or stay on its 60-second wall-clock cadence? If sim-time jumps but real-time doesn't, the advisor will lag.
 
 ## Re-grading guidance
 
