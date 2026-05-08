@@ -13,6 +13,7 @@ import { RouteAnimator } from './evacuation/RouteAnimator.js';
 import { BottleneckMarker } from './evacuation/BottleneckMarker.js';
 import { ShelterMarker } from './evacuation/ShelterMarker.js';
 import { PopulationDots } from './evacuation/PopulationDots.js';
+import { ContraflowAnimator } from './evacuation/ContraflowAnimator.js';
 import { PanelManager } from './panels/PanelManager.js';
 import { VoiceInput } from './interaction/VoiceInput.js';
 import { Keybindings } from './interaction/Keybindings.js';
@@ -44,6 +45,7 @@ class App {
     this.bottlenecks = null;
     this.shelters = null;
     this.populations = null;
+    this.contraflow = null;
 
     this._currentMode = 'MONITOR';
 
@@ -193,6 +195,7 @@ class App {
     if (this.bottlenecks)  this.bottlenecks.setEvacMode(isEvac);
     if (this.shelters)     this.shelters.setEvacMode(isEvac);
     if (this.populations)  this.populations.setEvacMode(isEvac);
+    if (this.contraflow)   this.contraflow.setEvacMode(isEvac);
 
     // EVACUATE: open the evac panel if it isn't already open.
     if (isEvac) {
@@ -239,6 +242,9 @@ class App {
 
     this.bottlenecks = new BottleneckMarker(this.scenario, this.terrain);
     sg.add(this.bottlenecks.group);
+
+    this.contraflow = new ContraflowAnimator(this.scenario, this.terrain);
+    sg.add(this.contraflow.group);
 
     this.fireCA = new CellularAutomata(this.scenario);
     this.fireOverlay = new FireOverlay(this.scenario, this.terrain, this.fireCA);
@@ -311,6 +317,8 @@ class App {
     if (this.shelters && snap?.evacuation?.shelterUsage) {
       this.shelters.setUsage(snap.evacuation.shelterUsage);
     }
+
+    if (this.contraflow) this.contraflow.applySnapshot(snap);
   }
 
   _handleCanvasClick(ev) {
@@ -352,6 +360,7 @@ class App {
     if (this.populations) this.populations.update(dt);
     if (this.bottlenecks) this.bottlenecks.update(dt, this.scene.camera);
     if (this.zones) this.zones.update(dt);
+    if (this.contraflow) this.contraflow.update(dt);
     this.scene.update(dt);
     this.scene.renderer.render(this.scene.scene, this.scene.camera);
   }
