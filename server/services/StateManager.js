@@ -48,6 +48,14 @@ export class StateManager extends EventEmitter {
     this.aiProactiveEnabled = true;
     this.ptt = false;
     this.timelineMin = 0;
+
+    // Snapshot ring for time-jump rewind (TODO group H3). Pushed every
+    // SNAPSHOT_INTERVAL_MIN simulated minutes via tickSimulation; bounded to
+    // SNAPSHOT_RING_MAX entries (~2 hr of demo history at default cadence).
+    this.snapshotRing = [];
+    this.SNAPSHOT_INTERVAL_MIN = 5;
+    this.SNAPSHOT_RING_MAX = 24;
+    this._lastSnapshotMin = -Infinity;
   }
 
   attachIO(io) {
@@ -111,7 +119,80 @@ export class StateManager extends EventEmitter {
     // Demo time: 1 wall-second = 0.5 simulated minute (so a 60 min event plays out in 2 minutes).
     this.simTimeMin += 0.5;
     if (this.simTimeMin > 600) this.simRunning = false;
+    this.maybePushSnapshot();
     this.broadcast('tick', { simTimeMin: this.simTimeMin });
+  }
+
+  // ----- snapshot ring (time-jump rewind) -----
+
+  maybePushSnapshot() {
+    if (this.simTimeMin - this._lastSnapshotMin < this.SNAPSHOT_INTERVAL_MIN) return;
+    this._lastSnapshotMin = this.simTimeMin;
+    this.pushServerSnapshot();
+  }
+
+  pushServerSnapshot() {
+    const snap = {
+      simTimeMin: this.simTimeMin,
+      weather: { ...this.weather },
+      fire: { ...this.fire, arrivalGrid: undefined },
+      fireArrivalByNode: Array.from(this.fireArrivalByNode.entries()),
+      evacuation: {
+        lastRunAt: this.evacuation.lastRunAt,
+        zones: this.evacuation.zones.map(z => ({
+          ...z,
+          route: z.route ? { ...z.route, edgeIds: z.route.edgeIds?.slice() || [], destinations: (z.route.destinations || []).map(d => ({ ...d })) } : null,
+          bottleneck: z.bottleneck ? { ...z.bottleneck } : null
+        })),
+        bottlenecks: this.evacuation.bottlenecks.map(b => ({ ...b })),
+        shelterUsage: this.evacuation.shelterUsage.map(s => ({ ...s })),
+        lostRoads: this.evacuation.lostRoads,
+        totalEvacuated: this.evacuation.totalEvacuated,
+        totalPopulation: this.evacuation.totalPopulation
+      },
+      edgeBlockedIds: this.scenario.edges.filter(e => e.blocked).map(e => e.id),
+      edgeContraflowIds: this.scenario.edges.filter(e => e.contra).map(e => e.id)
+    };
+    this.snapshotRing.push(snap);
+    while (this.snapshotRing.length > this.SNAPSHOT_RING_MAX) this.snapshotRing.shift();
+  }
+
+  findSnapshotBefore(targetMin) {
+    let best = null;
+    for (const s of this.snapshotRing) {
+      if (s.simTimeMin <= targetMin && (!best || s.simTimeMin > best.simTimeMin)) best = s;
+    }
+    return best;
+  }
+
+  applyServerSnapshot(snap) {
+    if (!snap) return false;
+    this.simTimeMin = snap.simTimeMin;
+    this.weather = { ...snap.weather };
+    this.fire = { ...snap.fire, arrivalGrid: null };
+    this.fireArrivalByNode = new Map(snap.fireArrivalByNode);
+    this.evacuation = {
+      lastRunAt: snap.evacuation.lastRunAt,
+      zones: snap.evacuation.zones.map(z => ({
+        ...z,
+        route: z.route ? { ...z.route, edgeIds: z.route.edgeIds.slice(), destinations: (z.route.destinations || []).map(d => ({ ...d })) } : null,
+        bottleneck: z.bottleneck ? { ...z.bottleneck } : null
+      })),
+      bottlenecks: snap.evacuation.bottlenecks.map(b => ({ ...b })),
+      shelterUsage: snap.evacuation.shelterUsage.map(s => ({ ...s })),
+      lostRoads: snap.evacuation.lostRoads,
+      totalEvacuated: snap.evacuation.totalEvacuated,
+      totalPopulation: snap.evacuation.totalPopulation
+    };
+    // Restore edge flags from the snapshot
+    const blockedSet = new Set(snap.edgeBlockedIds);
+    const contraSet = new Set(snap.edgeContraflowIds);
+    for (const e of this.scenario.edges) {
+      e.blocked = blockedSet.has(e.id);
+      e.contra = contraSet.has(e.id);
+    }
+    this._lastSnapshotMin = snap.simTimeMin;
+    return true;
   }
 
   resetScenario(scenario) {
@@ -124,10 +205,13 @@ export class StateManager extends EventEmitter {
       lastRunAt: 0,
       zones: scenario.zones.map(z => ({ ...z })),
       bottlenecks: [],
+      shelterUsage: scenario.shelters.map(s => ({ nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0 })),
       lostRoads: 0,
       totalEvacuated: 0,
       totalPopulation: scenario.populations.reduce((a, p) => a + p.count, 0)
     };
+    this.snapshotRing = [];
+    this._lastSnapshotMin = -Infinity;
     this.advisorMessages = [];
     this.broadcast('scenario', this.publicScenario());
     this.broadcast('snapshot', this.snapshot());

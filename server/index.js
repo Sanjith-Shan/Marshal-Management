@@ -96,6 +96,19 @@ io.on('connection', (socket) => {
   socket.on('fire:state', (data) => {
     state.updateFireFromClient(data);
   });
+
+  // Client acknowledges a time-jump after fast-forwarding its CA. We update
+  // arrival from the fresh data and re-run the evacuation engine so zones /
+  // routes / bottlenecks reflect the post-jump fire state.
+  socket.on('time-jump:applied', async (data) => {
+    if (Array.isArray(data?.arrivalByNode)) {
+      state.fireArrivalByNode = new Map(data.arrivalByNode);
+    }
+    if (data?.fire) {
+      state.updateFireFromClient(data.fire);
+    }
+    try { await evac.runFullEvacuation(); } catch (e) { console.warn('evac after jump failed:', e.message); }
+  });
 });
 
 // --------------------- action dispatcher ---------------------
@@ -137,6 +150,50 @@ async function handleAction(msg, socket) {
     case 'timeline':
       state.setTimeline(payload.minutes);
       break;
+    case 'time-jump': {
+      const delta = Number(payload?.deltaMin) || 0;
+      if (delta === 0) break;
+      const targetMin = Math.max(0, Math.min(600, state.simTimeMin + delta));
+
+      if (delta > 0) {
+        // Forward: bump server clock and instruct the client to fast-forward
+        // its CA. Client will respond with `time-jump:applied` carrying a fresh
+        // arrivalByNode, at which point we re-run the evacuation engine.
+        const advanced = targetMin - state.simTimeMin;
+        state.simTimeMin = targetMin;
+        state.broadcast('tick', { simTimeMin: state.simTimeMin });
+        const steps = Math.max(1, Math.round(advanced / 0.5));
+        state.broadcast('time-fast-forward', { steps, targetMin });
+        state.pushAdvisorMessage({
+          severity: 'info', source: 'system',
+          text: `Time +${Math.round(advanced)} min → T+${Math.round(targetMin)}m. Recomputing fire spread + evacuation…`
+        });
+      } else {
+        // Backward: restore from the nearest snapshot ≤ target. Server runs
+        // evac with restored arrival; client restores its CA from its own ring.
+        const snap = state.findSnapshotBefore(targetMin);
+        if (!snap) {
+          const earliest = state.snapshotRing[0]?.simTimeMin;
+          state.pushAdvisorMessage({
+            severity: 'warn', source: 'system',
+            text: earliest != null
+              ? `Cannot rewind to T+${Math.round(targetMin)}m. Earliest snapshot is T+${Math.round(earliest)}m.`
+              : `Cannot rewind: no snapshots yet. Wait at least ${state.SNAPSHOT_INTERVAL_MIN} sim-minutes.`
+          });
+          break;
+        }
+        state.applyServerSnapshot(snap);
+        state.broadcast('tick', { simTimeMin: state.simTimeMin });
+        state.broadcast('time-rewind', { targetMin: snap.simTimeMin });
+        try { await evac.runFullEvacuation(); } catch (e) { console.warn('evac after rewind failed:', e.message); }
+        state.broadcast('snapshot', state.snapshot());
+        state.pushAdvisorMessage({
+          severity: 'info', source: 'system',
+          text: `Rewound to T+${Math.round(snap.simTimeMin)}m. Fire and evacuation restored.`
+        });
+      }
+      break;
+    }
     case 'ptt':
       state.setPTT(payload.active);
       break;
