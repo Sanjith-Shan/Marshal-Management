@@ -108,6 +108,13 @@ io.on('connection', (socket) => {
       state.updateFireFromClient(data.fire);
     }
     try { await evac.runFullEvacuation(); } catch (e) { console.warn('evac after jump failed:', e.message); }
+    if (state._pendingProactiveAfterJump) {
+      state._pendingProactiveAfterJump = false;
+      try {
+        const insight = await ai.proactiveScan();
+        if (insight) state.pushAdvisorMessage(insight);
+      } catch (e) { console.warn('proactive after jump failed:', e.message); }
+    }
   });
 });
 
@@ -153,6 +160,7 @@ async function handleAction(msg, socket) {
     case 'time-jump': {
       const delta = Number(payload?.deltaMin) || 0;
       if (delta === 0) break;
+      const absDelta = Math.abs(delta);
       const targetMin = Math.max(0, Math.min(600, state.simTimeMin + delta));
 
       if (delta > 0) {
@@ -168,6 +176,10 @@ async function handleAction(msg, socket) {
           severity: 'info', source: 'system',
           text: `Time +${Math.round(advanced)} min → T+${Math.round(targetMin)}m. Recomputing fire spread + evacuation…`
         });
+        // Big jump → kick proactive scan after the client acks (evac will be
+        // re-run in `time-jump:applied`). Otherwise the advisor lags up to a
+        // wall-clock minute behind a sim that just leapt forward.
+        if (absDelta >= 30) state._pendingProactiveAfterJump = true;
       } else {
         // Backward: restore from the nearest snapshot ≤ target. Server runs
         // evac with restored arrival; client restores its CA from its own ring.
@@ -191,6 +203,12 @@ async function handleAction(msg, socket) {
           severity: 'info', source: 'system',
           text: `Rewound to T+${Math.round(snap.simTimeMin)}m. Fire and evacuation restored.`
         });
+        if (absDelta >= 30) {
+          try {
+            const insight = await ai.proactiveScan();
+            if (insight) state.pushAdvisorMessage(insight);
+          } catch (e) { console.warn('proactive after rewind failed:', e.message); }
+        }
       }
       break;
     }
@@ -219,8 +237,8 @@ setInterval(() => state.tickSimulation(), 1000);
 weather.start();
 weather.on('update', (w) => state.updateWeather(w));
 
-// RESUME HERE: couple proactive AI to time-jump — when handleAction('time-jump') advances simTimeMin by ≥ 30, await ai.proactiveScan() and pushAdvisorMessage immediately so the advisor doesn't lag the sim clock by up to one wall-clock minute (BUILD_LOG 2026-05-08, "Next session: pick up here" item 1).
-// Proactive AI: every 60 sec analyze the scene
+// Proactive AI: every 60 sec analyze the scene. Big sim-time jumps also kick
+// this in the time-jump handler so the advisor doesn't lag a leaping clock.
 setInterval(async () => {
   if (!state.aiProactiveEnabled) return;
   const insight = await ai.proactiveScan();
