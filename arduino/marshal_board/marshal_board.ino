@@ -5,6 +5,8 @@
 // Wiring:
 //   A0  joystick X
 //   A1  joystick Y
+//   A2  TIME_BACK   (rewind sim −30 min)    (active LOW, INPUT_PULLUP)
+//   A3  TIME_FWD    (advance sim +30 min)   (active LOW, INPUT_PULLUP)
 //   D2  joystick click (active LOW, INPUT_PULLUP)
 //   D3  push-to-talk           (active LOW, INPUT_PULLUP)
 //   D4  panel: weather         (active LOW, INPUT_PULLUP)
@@ -29,11 +31,13 @@ const uint8_t PIN_EVAC   = 8;
 const uint8_t PIN_MODEA  = 9;
 const uint8_t PIN_MODEB  = 10;
 const uint8_t PIN_RESET  = 11;
+const uint8_t PIN_TBACK  = A2;
+const uint8_t PIN_TFWD   = A3;
 
 uint8_t buttons[] = {
   PIN_JCLICK, PIN_PTT, PIN_PWX, PIN_PEVAC,
   PIN_PAI, PIN_PVID, PIN_EVAC, PIN_MODEA,
-  PIN_MODEB, PIN_RESET
+  PIN_MODEB, PIN_RESET, PIN_TBACK, PIN_TFWD
 };
 
 void setup() {
@@ -61,6 +65,8 @@ void loop() {
   int modeA    = activeLow(PIN_MODEA);
   int modeB    = activeLow(PIN_MODEB);
   int rst      = activeLow(PIN_RESET);
+  int tBack    = activeLow(PIN_TBACK);
+  int tFwd     = activeLow(PIN_TFWD);
 
   // Order must match the parser in ArduinoService.js
   Serial.print(jx);       Serial.print(',');
@@ -74,7 +80,9 @@ void loop() {
   Serial.print(modeA);    Serial.print(',');
   Serial.print(modeB);    Serial.print(',');
   Serial.print(rst);      Serial.print(',');
-  Serial.println(jClick);
+  Serial.print(jClick);   Serial.print(',');
+  Serial.print(tBack);    Serial.print(',');
+  Serial.println(tFwd);
 
   delay(33);
 }

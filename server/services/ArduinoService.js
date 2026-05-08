@@ -57,7 +57,9 @@ export class ArduinoService extends EventEmitter {
   _onLine(line) {
     const parts = line.trim().split(',').map(Number);
     if (parts.length < 12 || parts.some(Number.isNaN)) return;
-    const [jx, jy, ptt, wx, evac, ai, vid, evacuate, mA, mB, reset, jClick] = parts;
+    // Fields 13/14 (tBack, tFwd) added with TODO group H1; older firmware
+    // sending 12 fields still works — the destructuring leaves them undefined.
+    const [jx, jy, ptt, wx, evac, ai, vid, evacuate, mA, mB, reset, jClick, tBack, tFwd] = parts;
 
     // Joystick deadzone → analog pan/rotate
     if (Math.abs(jx - 512) > 60 || Math.abs(jy - 512) > 60) {
@@ -76,6 +78,16 @@ export class ArduinoService extends EventEmitter {
     this._edge('evacuate', evacuate, () => this.emit('event', { type: 'evacuate' }));
     this._edge('reset', reset, () => this.emit('event', { type: 'reset' }));
     this._edge('jClick', jClick, () => this.emit('event', { type: 'joystick:reset' }));
+    if (tFwd !== undefined) {
+      this._edge('tFwd', tFwd, () =>
+        this.emit('event', { type: 'time-jump', payload: { deltaMin: 30 } })
+      );
+    }
+    if (tBack !== undefined) {
+      this._edge('tBack', tBack, () =>
+        this.emit('event', { type: 'time-jump', payload: { deltaMin: -30 } })
+      );
+    }
 
     // Mode switch (2 pins encode 3 positions)
     const modeBits = `${mA}${mB}`;
