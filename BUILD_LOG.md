@@ -3,6 +3,26 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08
+
+**TODO group H1/H2/H3 landed (desktop-testable; XR path untouched).** Time-jump action wired end-to-end: keyboard `[` / `]` (Shift = ±60), HUD «« / »» buttons (`client/index.html:50-51`, `client/src/ui/HUD.js:26-37`), and Arduino A2/A3 (`arduino/marshal_board/marshal_board.ino:25-26`, `server/services/ArduinoService.js:75-86`) all emit the same `{ type: 'time-jump', payload: { deltaMin } }` action shape. Three pieces of new infrastructure:
+
+- **Client CA snapshot/restore/fastForward** (`client/src/fire/CellularAutomata.js:206-243`). Forward jumps run `_stepOnce()` N times bypassing the wall-clock rate limit; rewind restores cloned TypedArrays.
+- **Server snapshot ring buffer** (`server/services/StateManager.js:52-58, 117-188`). Pushes `{ simTimeMin, weather, fire, fireArrivalByNode, evacuation, edge flags }` every 5 sim-minutes via `tickSimulation`, capped at 24 entries (~2 hr of history). `findSnapshotBefore(target)` + `applyServerSnapshot(snap)` round out the API.
+- **Server time-jump dispatcher** (`server/index.js:140-187`). Forward: bumps clock, broadcasts `time-fast-forward`, client acks via new `time-jump:applied` event carrying fresh `arrivalByNode`, server then re-runs `EvacuationEngine`. Backward: finds nearest server snapshot ≤ target, restores, re-runs evac, broadcasts `time-rewind` so client can restore its CA from its own ring.
+
+**H3 decision (was open question):** picked **snapshot ring buffer** over deterministic re-sim. Reasoning: snapshot is one-TypedArray-copy per ring slot (~80 KB × 24 = ~2 MB), no need to refactor the CA's `Math.random()` call sites to a seeded PRNG, and demo-grade fidelity is fine. Re-sim is the right answer the day multi-user (stretch goal #15) lands; defer until then.
+
+**Hardware partial.** Firmware extended with two new pins (A2 / A3 = TIME_BACK / TIME_FWD) and the `ArduinoService` parser is backward-compatible (older 12-field firmware still works; 14-field gates the new edge-trigger). H4–H6 (Arduino UNO Q wireless migration) NOT done — needs hardware to test.
+
+**XR safety.** No edits to `ARSession.js`, `SceneRoot.js`, or the per-frame render loop's XR gating in `main.js`. Time-jump events are socket-driven and execute identically whether `ar.active` is true or false.
+
+**Verification.** `npm run build` clean (27 modules), `node server/_selftest.js` 18/18, `node server/_e2e.js` 12/12.
+
+**Open questions resolved:** H3 (snapshot vs re-sim); H1 sub-question on "advance whole sim vs visualization-only" — went with whole-sim (clock + fire + evac re-runs).
+
+**Still open:** H1 sub-question on AI proactive cadence vs sim-jump (the proactive scan still ticks on 60 s wall-clock; if simTimeMin jumps an hour ahead the advisor will be stale until the next wall-clock minute). H4/H5/H6.
+
 ## Scope Decisions (Hackathon-Realism)
 
 The v3 spec is ambitious. To finish in 24 hours and ensure both desktop + Quest 3 work, the following adjustments are made:
@@ -55,9 +75,9 @@ arduino/ marshal_board.ino firmware
 
 ## Verification
 
-- `npm run build` — 27 modules, 538 kB gzipped 138 kB, 0 errors
-- `node server/_selftest.js` — 9/9 passed (scenario, evac, AI smoke)
-- `node server/_e2e.js` — 9/9 passed (socket round-trip)
+- `npm run build` — 27 modules, 540 kB gzipped 140 kB, 0 errors
+- `node server/_selftest.js` — 18/18 passed (scenario, evac, AI smoke, snapshot ring buffer)
+- `node server/_e2e.js` — 12/12 passed (socket round-trip incl. time-jump)
 - Headless Chrome screenshot — page renders, no JS errors
 
 ## Feature coverage vs v3 spec
@@ -117,7 +137,7 @@ arduino/ marshal_board.ino firmware
 
 **Medium (rough edges or cosmetic gaps from spec):**
 
-7. No 30-min / 1-hr fire projection layer. Timeline slider is decorative.
+7. No 30-min / 1-hr fire projection layer. Timeline slider is decorative. **(Partially addressed 2026-05-08:** time-jump buttons / `[` / `]` keys now actually advance & rewind the whole simulation via the snapshot ring. The `T` scrubber is still cosmetic — true preview-without-commit is a separate v2.**)**
 8. Engine produces only primary route; no secondary/alternate.
 9. Contraflow has no animated visual (color flip only).
 10. Blocked roads turn red but don't show pulsing X markers.
@@ -140,22 +160,20 @@ arduino/ marshal_board.ino firmware
 
 > User-requested addition. Two physical buttons on the hardware board for jumping the simulation forward/back in time, **plus a platform migration** of the entire hardware integration from classic UNO + USB serial to Arduino UNO Q + wireless. The two are bundled here because both touch firmware and `ArduinoService.js`, and doing them together avoids two firmware rewrites.
 
-**H1 — Two new hardware controls.** Forward (`TIME_FWD`) and back (`TIME_BACK`) buttons. Forward jumps `simTimeMin` by +30 / +60 min (single press / hold), fast-forwards the fire CA the equivalent number of steps, and re-runs `EvacuationEngine` so zones / routes / bottlenecks reflect the new state. Back rewinds by the same step. This refines and replaces the currently-decorative timeline scrubber (Medium gap #7).
+**H1 — Two new hardware controls.** ✅ **Shipped 2026-05-08.** Forward (`TIME_FWD`) and back (`TIME_BACK`) buttons on classic-UNO firmware (A3 / A2). Forward jumps `simTimeMin` by +30 (or +60 with keyboard `Shift+]`), fast-forwards the fire CA, and re-runs `EvacuationEngine`. Back rewinds to the nearest snapshot. Hardware "press and hold = ±60" not implemented — use two presses or the keyboard shortcut. Keyboard fallback `[` / `]` (Shift = ±60) and HUD «« / »» buttons mirror the same action. Validated end-to-end on desktop; physical-board path is wired but never flashed (firmware backward-compatible with the old 12-field protocol).
 
-**H2 — Server-side time-jump API.** New `socket.emit('action', { type: 'time-jump', payload: { deltaMin: +30 } })`. Server: advance `state.simTimeMin`, ask the client CA to fast-step to match (or run a server-side mirror CA), recompute evacuation, broadcast snapshot.
+**H2 — Server-side time-jump API.** ✅ **Shipped 2026-05-08.** `socket.emit('action', { type: 'time-jump', payload: { deltaMin: ±30|±60 } })`. Forward: server advances `simTimeMin`, broadcasts `time-fast-forward { steps, targetMin }`, client fast-steps CA and acks via `time-jump:applied { arrivalByNode, fire }`, server re-runs evac. Backward: server picks nearest snapshot ≤ target, calls `applyServerSnapshot`, re-runs evac, broadcasts `time-rewind { targetMin }` so the client can restore its own CA from its local ring. Both paths broadcast a fresh snapshot.
 
-**H3 — Reverse time is non-trivial.** The fire CA is forward-only / non-reversible. Pick one of two strategies (decision deferred — see open question below):
-  - **Snapshot ring buffer:** every 5 sim-min, push `{ fire.state, fire.arrival, weather, evacuation }` onto a circular buffer (e.g. 24 entries = 2 hr of history). Back-button restores from the closest snapshot.
-  - **Deterministic re-sim:** seed the CA's `Math.random()` from the scenario seed + step index, and re-simulate from t=0 to `target` on rewind. Slower but uses no extra memory and gives bit-identical replay.
+**H3 — Reverse-time strategy.** ✅ **Decided 2026-05-08: snapshot ring buffer.** Every 5 sim-minutes push `{ simTimeMin, weather, fire, fireArrivalByNode, evacuation, edge flags }` onto a 24-entry buffer (~2 hr of history). Server uses one ring; client uses a parallel CA-only ring at the same cadence. Why this and not deterministic re-sim: snapshot path is ~80 KB × 24 = ~2 MB total, requires no PRNG refactor, and is one TypedArray copy per slot. Re-sim is correct for multi-user / replay but is a multi-hour refactor; defer until stretch goal #15 actually needs it.
 
-**H4 — Migrate firmware target to Arduino UNO Q.** Existing `arduino/marshal_board/marshal_board.ino` is for classic UNO + Arduino IDE. UNO Q uses **Arduino App Lab** (web IDE, different sketch conventions, can leverage onboard MPU/Linux side). Add `arduino/marshal_board_q/` as the new authoring location. **Keep the classic UNO sketch as a reference** — don't delete; it's a working CSV protocol the wireless path can mirror.
+**H4 — Migrate firmware target to Arduino UNO Q.** 🔴 **Not started.** Existing `arduino/marshal_board/marshal_board.ino` is for classic UNO + Arduino IDE. UNO Q uses **Arduino App Lab** (web IDE, different sketch conventions, can leverage onboard MPU/Linux side). Add `arduino/marshal_board_q/` as the new authoring location. **Keep the classic UNO sketch as a reference** — don't delete; it's a working CSV protocol the wireless path can mirror. (As of 2026-05-08 the classic sketch is updated for H1's new pins and is still the only path.)
 
-**H5 — Drop USB serial; move to wireless.** UNO Q has WiFi / BLE built in and will be powered by a portable battery, untethered. Replace `ArduinoService.js`'s `serialport` reader with a network endpoint:
+**H5 — Drop USB serial; move to wireless.** 🔴 **Not started.** UNO Q has WiFi / BLE built in and will be powered by a portable battery, untethered. Replace `ArduinoService.js`'s `serialport` reader with a network endpoint:
   - Recommended: UNO Q runs a WebSocket *client* and connects to the server's existing Socket.IO (or a dedicated `/board` namespace), POSTs button events as the same `{ type, payload }` action shape the keyboard fallback uses.
   - Alternatives: MQTT broker (extra moving part); HTTP POST per event (chatty but simple); BLE (only if the server host is also a BLE peripheral, which complicates deployment).
   - Existing `ArduinoService.js` should stay as a fallback path (USB still works for development on a laptop) but the production target is the WiFi path.
 
-**H6 — Pairing / discovery UX.** Without USB autodetect, the user needs a way to connect the board to the running server. Likely: server prints a join URL or 6-digit code at startup; UNO Q prompts (or is pre-configured) with WiFi SSID + server URL.
+**H6 — Pairing / discovery UX.** 🔴 **Not started.** Without USB autodetect, the user needs a way to connect the board to the running server. Likely: server prints a join URL or 6-digit code at startup; UNO Q prompts (or is pre-configured) with WiFi SSID + server URL.
 
 ## Open questions (for future sessions to interpret)
 
@@ -172,12 +190,13 @@ arduino/ marshal_board.ino firmware
 - The "evacuated %" is a wall-clock-since-evac-trigger linear ramp — not a real flow simulation. Looks fine but is fake. Keep or replace?
 - The `simTimeMin` clock advances independently of fire-CA stepping. They should probably be coupled. Are they drifting apart in long sessions?
 - Does the AR session correctly destroy itself / restore desktop on `session.end()`? Path is written but never exercised.
-- (H3) For time-rewind: snapshot ring buffer vs deterministic re-sim — which is right? Snapshot is faster and simpler; re-sim gives bit-identical replay and pairs naturally with multi-user (stretch goal #15). Decide before building H1.
+- ~~(H3) For time-rewind: snapshot ring buffer vs deterministic re-sim — which is right?~~ **Resolved 2026-05-08: snapshot ring buffer.** See TODO group H3 above.
 - (H4) Does Arduino App Lab support standard `.ino`-style sketches, or does it require a different project layout / build manifest? Confirm before porting.
 - (H5) Is the WiFi / WebSocket round-trip fast enough for the joystick (~30 Hz)? Buttons are edge-triggered so latency tolerance is high, but joystick streaming may need throttling or a different transport.
 - (H5) If the UNO Q drops WiFi mid-demo, what's the failure UX? Currently nothing — keyboard fallback masks it but there's no visible "board offline" indicator.
-- (H1) Should "forward 30 min" advance the *whole* sim (clock + fire + weather + evac), or just the fire-projection visualization layer? The first is honest, the second is faster but means the rewound state is fake. Spec language ("see the fire spread in 30 minutes") suggests the first.
-- (H1) On forward-jump, does the AI advisor's proactive scan also re-run, or stay on its 60-second wall-clock cadence? If sim-time jumps but real-time doesn't, the advisor will lag.
+- ~~(H1) Should "forward 30 min" advance the *whole* sim (clock + fire + weather + evac), or just the fire-projection visualization layer?~~ **Resolved 2026-05-08: whole sim.** Server bumps `simTimeMin`, client fast-steps the CA, evac re-runs against the new arrivalByNode. Weather is not re-fetched on jump — it stays whatever the last NWS poll returned (acceptable since jumps are short).
+- (H1) On forward-jump, does the AI advisor's proactive scan also re-run, or stay on its 60-second wall-clock cadence? **As of 2026-05-08: still wall-clock.** The proactive `setInterval(60_000)` in `server/index.js` is unaware of sim-jumps. After a +60 min jump the advisor lags up to one wall-clock minute. Cheap fix: kick `ai.proactiveScan()` from the time-jump handler if the delta is large.
+- (Snapshot ring buffer) Client and server rings are independent and pushed at the same 5-min sim cadence, but the server pushes from `tickSimulation` (driven by wall-clock `setInterval`) while the client pushes from the server's `tick` event. They should stay in sync as long as the socket isn't stalled; if a client connects mid-session it has no history. Acceptable for the demo but worth flagging.
 
 ## Re-grading guidance
 
