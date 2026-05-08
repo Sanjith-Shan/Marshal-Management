@@ -65,6 +65,39 @@ function assert(cond, msg) {
   console.log(`  total evacuated: ${result.totalEvacuated}`);
   assert(result.totalEvacuated > 0, 'still evacuating after blockage');
 
+  // ---- Snapshot ring buffer (TODO group H3) ----
+  // Push a couple of snapshots at distinct sim times, verify findSnapshotBefore
+  // returns the correct one, and that applyServerSnapshot restores state.
+  state.simTimeMin = 10;
+  state.fireArrivalByNode = new Map([[scn.populations[0].nodeId, 25]]);
+  state.pushServerSnapshot();
+  state.simTimeMin = 25;
+  state.fireArrivalByNode = new Map([[scn.populations[0].nodeId, 12]]);
+  state.pushServerSnapshot();
+  assert(state.snapshotRing.length === 2, 'two snapshots accumulated');
+  const before20 = state.findSnapshotBefore(20);
+  assert(before20 && before20.simTimeMin === 10, 'findSnapshotBefore picks the latest snap ≤ target');
+  const before50 = state.findSnapshotBefore(50);
+  assert(before50 && before50.simTimeMin === 25, 'findSnapshotBefore picks the most recent for high targets');
+  const beforeZero = state.findSnapshotBefore(0);
+  assert(beforeZero === null, 'findSnapshotBefore returns null when no snap ≤ target');
+
+  // Mutate state, then rewind.
+  state.simTimeMin = 99;
+  state.blockRoad(scn.edges[0].id, true);
+  const restoreOk = state.applyServerSnapshot(before20);
+  assert(restoreOk, 'applyServerSnapshot returns true');
+  assert(state.simTimeMin === 10, 'sim time restored to snapshot');
+  assert(scn.edges[0].blocked === false, 'edge blocked flag rolled back by snapshot');
+  assert(state.fireArrivalByNode.get(scn.populations[0].nodeId) === 25, 'fire arrival restored');
+
+  // Ring eviction
+  for (let i = 0; i < 30; i++) {
+    state.simTimeMin = 100 + i;
+    state.pushServerSnapshot();
+  }
+  assert(state.snapshotRing.length === state.SNAPSHOT_RING_MAX, 'ring buffer caps at SNAPSHOT_RING_MAX');
+
   // AI advisor smoke test (mock, no API key)
   const ai = new AIAdvisor(state, { current: {} });
   console.log('AI backend:', ai.backendName());

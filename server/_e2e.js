@@ -76,6 +76,25 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   assert(updates.advisor.length > 0, 'advisor responded');
   console.log('  advisor said:', updates.advisor[updates.advisor.length - 1].text.slice(0, 120));
 
+  // Time-jump forward (TODO group H1/H2). Verify sim clock advances and a
+  // 'time-fast-forward' instruction is broadcast to the client.
+  let fastForwardSeen = false;
+  let lastTickMin = null;
+  sock.on('time-fast-forward', () => { fastForwardSeen = true; });
+  sock.on('tick', ({ simTimeMin }) => { lastTickMin = simTimeMin; });
+  const beforeJumpTick = lastTickMin ?? 0;
+  sock.emit('action', { type: 'time-jump', payload: { deltaMin: 30 } });
+  await wait(400);
+  assert(fastForwardSeen, 'time-fast-forward broadcast received');
+  assert(lastTickMin >= beforeJumpTick + 25, `tick advanced by ~30 (was ${beforeJumpTick}, now ${lastTickMin})`);
+
+  // Time-jump backward without enough history → expect a warning advisor msg,
+  // not a crash.
+  const advisorBefore = updates.advisor.length;
+  sock.emit('action', { type: 'time-jump', payload: { deltaMin: -30 } });
+  await wait(300);
+  assert(updates.advisor.length > advisorBefore, 'rewind without history produces an advisor message');
+
   sock.disconnect();
   proc.kill();
   console.log('\ne2e test', process.exitCode ? 'FAILED' : 'PASSED');
