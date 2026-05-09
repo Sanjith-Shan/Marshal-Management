@@ -3,6 +3,28 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 12
+
+**Compass markers + wind indicator + sim-clock-synced fire spread.**
+
+**1. CompassMarkers (`client/src/ar/CompassMarkers.js`).** New renderer drops 3D N/S/E/W sprites at the four edges of the terrain (north sprite at -Z, south at +Z, east at +X, west at -X — matching the `latLngToGrid` projection convention). Sprites use canvas-textured `THREE.Sprite` so they always face the camera but stay fixed in world space — N stays at the actual north edge no matter how the user rotates the view. North is colored red for distinguishability.
+
+**2. WindIndicator (`client/src/ar/WindIndicator.js`).** New renderer draws a 3D `ArrowHelper` at the NE corner of the map pointing in the wind's TOWARD direction (+180° from `windDeg`). Length scales with `windKph` (clamped 0.4–1.4 scene units), color shifts amber → red on Red Flag, label shows `WIND 35 kph · 🚩`. Pulses faster on Red Flag. Updates on `weather` socket events and on snapshot (for late joiners).
+
+**3. Wind verification.** Confirmed `CellularAutomata._stepOnce()` factors wind correctly: at 35 kph, downwind ignition probability boosted to 2.17×, upwind capped at 0.5× — 4.3× directional asymmetry. Ember spotting (when `windKph > 25`) jumps 4–8 cells downwind with 30% per-step probability, 50% ignite chance — explicit wind-direction acceleration of remote spot fires. Both already correctly use the `(windDeg + 180) * π/180` toward-direction convention.
+
+**4. CA stepping synced to server clock (`client/src/fire/CellularAutomata.js`).** Slowed `STEP_INTERVAL` from 0.4 s → 1.0 s. Each step still advances `simMinutes` by 0.5, so fire now advances at exactly **0.5 sim-min per wall-second**, matching `StateManager.tickSimulation` cadence (`+1` sim-min every 2 wall-sec). Fire spread is ~2.5× slower per real-time second than before.
+
+**5. Hard sync of fireCA.simMinutes on every tick (`client/src/main.js`).** The `tick` socket handler now sets `fireCA.simMinutes = simTimeMin` so the arrival timestamps stamped on newly-burning cells use the same clock the user sees in the HUD. Eliminates remaining drift between client-internal CA stepping and server-authoritative sim time.
+
+**Effect for the user:** the fire's "burning area at minute N" now corresponds to the displayed minute on the HUD clock. Wind direction is visible at a glance via the arrow on the map; cardinal markers anchor the user's spatial sense.
+
+**Verification.** `npm run build` clean, selftest 25/25, e2e 14/14.
+
+**Still open:** AR/Quest 3, hardware UNO physical e2e, real LANDFIRE fuel grid, NIFC Cedar Fire perimeter overlay, optional ember-jump particle visualization.
+
+---
+
 ## 2026-05-08 — session 11
 
 **Real USGS terrain + route reroute legibility.**

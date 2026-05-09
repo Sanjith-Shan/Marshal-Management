@@ -15,6 +15,8 @@ import { ShelterMarker } from './evacuation/ShelterMarker.js';
 import { PopulationDots } from './evacuation/PopulationDots.js';
 import { ContraflowAnimator } from './evacuation/ContraflowAnimator.js';
 import { ProactiveOverlay } from './evacuation/ProactiveOverlay.js';
+import { CompassMarkers } from './ar/CompassMarkers.js';
+import { WindIndicator } from './ar/WindIndicator.js';
 import { PanelManager } from './panels/PanelManager.js';
 import { VoiceInput } from './interaction/VoiceInput.js';
 import { Keybindings } from './interaction/Keybindings.js';
@@ -48,6 +50,8 @@ class App {
     this.populations = null;
     this.contraflow = null;
     this.proactive = null;
+    this.compass = null;
+    this.windInd = null;
 
     this._currentMode = 'MONITOR';
 
@@ -85,6 +89,7 @@ class App {
       this.panels.applySnapshot(snap);
       this._applyEvacuationToScene(snap);
       if (this.fireCA && snap.weather) this.fireCA.setWind(snap.weather.windDeg, snap.weather.windKph);
+      if (this.windInd && snap.weather) this.windInd.setWind(snap.weather.windDeg, snap.weather.windKph, snap.weather.redFlag);
       if (snap.firms) this.hud.setFirms(snap.firms);
       if (snap.census) this.panels.setCensus(snap.census);
       if (snap.simRunning != null) {
@@ -95,6 +100,11 @@ class App {
 
     this.socket.on('tick', ({ simTimeMin }) => {
       this.hud.setSimTime(simTimeMin);
+      // Sync fire CA's clock to the server's authoritative sim clock so
+      // arrival times stamp with the same minute the user sees in the HUD.
+      // The CA still steps locally on its own STEP_INTERVAL; this just
+      // anchors the timestamp.
+      if (this.fireCA) this.fireCA.simMinutes = simTimeMin;
       this._maybeSnapCA(simTimeMin);
     });
 
@@ -140,6 +150,7 @@ class App {
     this.socket.on('weather', (w) => {
       this.panels.updateWeather(w);
       if (this.fireCA) this.fireCA.setWind(w.windDeg, w.windKph);
+      if (this.windInd) this.windInd.setWind(w.windDeg, w.windKph, w.redFlag);
     });
 
     this.socket.on('mode', (m) => {
@@ -289,6 +300,15 @@ class App {
     this.proactive = new ProactiveOverlay(this.scenario, this.terrain);
     sg.add(this.proactive.group);
 
+    this.compass = new CompassMarkers();
+    sg.add(this.compass.group);
+
+    this.windInd = new WindIndicator();
+    sg.add(this.windInd.group);
+    if (this.snapshot?.weather) {
+      this.windInd.setWind(this.snapshot.weather.windDeg, this.snapshot.weather.windKph, this.snapshot.weather.redFlag);
+    }
+
     this.fireCA = new CellularAutomata(this.scenario);
     this.fireOverlay = new FireOverlay(this.scenario, this.terrain, this.fireCA);
     sg.add(this.fireOverlay.mesh);
@@ -424,6 +444,7 @@ class App {
     if (this.zones) this.zones.update(dt);
     if (this.contraflow) this.contraflow.update(dt);
     if (this.proactive) this.proactive.update(dt, this.scene.camera);
+    if (this.windInd) this.windInd.update(dt);
     this.scene.update(dt);
     this.scene.renderer.render(this.scene.scene, this.scene.camera);
   }

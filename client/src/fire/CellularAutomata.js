@@ -5,8 +5,12 @@
 // downwind cell. The CA also records "arrival minute" per cell, which is
 // what the evacuation engine reads to decide when a road becomes blocked.
 //
-// Time model: one CA step = 0.5 simulated minutes. We step ~1 / 0.4 s of real
-// time so the demo plays at a watchable speed.
+// Time model: one CA step = 0.5 simulated minutes; we step every 1 wall-second
+// so the CA advances at 0.5 sim-min/wall-sec — exactly matching the server
+// clock (StateManager.tickSimulation: +1 sim-min every 2 sec). Fire arrival
+// stamps stay aligned with the displayed military-time HUD clock. The
+// 'tick' socket handler in main.js also hard-syncs simMinutes to the
+// server's authoritative simTimeMin every tick to correct any drift.
 
 const STATE_UNBURNED = 0;
 const STATE_BURNING = 1;
@@ -28,7 +32,7 @@ const FUEL_BURN_DURATION = [
   6,    // urban
 ];
 
-const STEP_INTERVAL = 0.4;        // seconds of wall time per CA step
+const STEP_INTERVAL = 1.0;        // seconds of wall time per CA step
 
 export class CellularAutomata {
   constructor(scenario) {
