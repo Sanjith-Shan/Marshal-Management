@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-05-08 — session 16 (Tier D continued: route fade + PTT readability)
+
+Continuing Tier D after session 15. D3 fade transitions, D5 voice transcription legibility. D6 (savepoints) and D1 (performance audit) still deferred — D6 because CA RNG is unseeded so true reproducibility needs a deeper refactor; D1 because it requires in-browser profiling not available here.
+
+Scope-coherence check before code: verified D3 fade timing (capped at 600 ms) doesn't lag rapid block-road testing; D3 must coexist with all evac re-run paths (block-road, time-jump, contraflow, override-zone, reset) — all funnel through `applySnapshot` so a single fade path covers them; D5 (transcription preview) was already wired in `VoiceInput.onresult` — only needs CSS legibility, not new logic.
+
+**D3 — route fade transition on recompute (`client/src/evacuation/RouteAnimator.js`)**:
+
+Previously `applySnapshot` removed old route geometry immediately and built new at full opacity → routes "snapped" to the new path with no visual continuity. Now:
+
+- New `_fadingOut[]` array on the renderer captures superseded entries (points, line, secLine) with their starting opacities.
+- Any existing route entries are pushed to `_fadingOut` instead of being disposed when `applySnapshot` runs.
+- New routes are built with all opacities set to 0 and a `fadeInStart` timestamp.
+- `update(dt)` drives both flows:
+  - **Fade-out**: lerps each entry's opacities from `*Start` → 0 over `_FADE_MS = 600`. When elapsed ≥ 600 ms, removes from group, disposes geometry + material.
+  - **Fade-in**: lerps current routes' opacities from 0 → target over the same duration; clears `fadeInStart` flag when done.
+- `setEvacMode(active)` was previously setting opacity directly on a frame that might collide with an in-progress fade-in (next `update()` would multiply by `k < 1` and visually pop). Updated to: set the new `targetOp` values, snap current opacities to those targets, and clear `fadeInStart`. Mode change is instantaneous; subsequent fade-ins use the mode-correct targets.
+
+Visual delta: blocking I-15 in COMMAND mode now produces a visible "old routes dim while new routes brighten" transition over ~0.6 s. Also fires on time-jump (route recomputes after CA fast-forward), on contraflow, on override-zone, and on reset — same path.
+
+**D5 — PTT transcription legibility pass (`client/src/ui/styles.css`)**:
+
+`VoiceInput.onresult` already streams the interim transcript to `#ptt-text` as the user speaks. The toast styling was tuned for "Listening…" placeholder text, not transcript content: 12 px font, single-line, no wrap. For a 10-word voice command the text was either truncated by the small toast width or wrapped awkwardly.
+
+- Bumped `font-size` 12 → 14, `letter-spacing` 0.08em → 0.04em (less stretched for body text).
+- Padding 8/14 → 10/18 (more breathing room).
+- Added `max-width: 70vw`, `word-break: break-word`, `line-height: 1.4` so multi-word transcripts wrap cleanly inside the toast.
+- Color softened from `--accent-hot` (red) to `#ffd9d9` (light pink-white) — easier to read; the pulsing dot keeps the "PTT active" red anchor.
+
+**Verification**: `npm run build` clean, selftest 25/25, e2e 14/14.
+
+**Tier D status after session 16**: D2 ✅, D3 ✅, D4 ✅, D5 ✅. Remaining: D1 (browser-side performance profile, no code change needed yet), D6 (canonical scenario savepoints — gated on seeding the CA RNG; non-trivial refactor).
+
+**No-conflict audit** (per user's "ensure goals don't constrain other aspects"):
+- Fade duration short enough not to interfere with rapid block-road testing.
+- Fade applies uniformly to all evac re-run triggers — no asymmetry.
+- Mode change still instantaneous (UX expectation) — fade-in flag cleared explicitly.
+- Memory: `_fadingOut` entries are disposed after fade. Bounded by max ~3 fade-outs in flight (one per zone). No leak.
+- D5 CSS doesn't collide with mode toast or other floating elements (positioned independently).
+
+---
+
 ## 2026-05-08 — session 15 (Tier D: fire-blocked styling + onboarding overlay)
 
 Continuing per session 13's plan after Tier A. Picking the two highest-value Tier D items.

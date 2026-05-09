@@ -573,15 +573,21 @@ kbd {
 .ptt-toast-inner {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   background: rgba(255, 95, 95, 0.16);
   border: 1px solid var(--accent-hot);
   backdrop-filter: blur(14px);
   border-radius: 10px;
-  padding: 8px 14px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--accent-hot);
+  padding: 10px 18px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: #ffd9d9;
+  max-width: 70vw;
+  word-break: break-word;
+  line-height: 1.4;
+}
+#ptt-text {
+  font-weight: 500;
 }
 .ptt-pulse {
   width: 8px;
