@@ -1,16 +1,32 @@
-// BottleneckMarker — orange pulsing rings at the midpoint of any edge
-// flagged as a bottleneck (flow > 80% capacity).
+// BottleneckMarker — vertical billboard warning signs at the midpoint of any
+// road segment where evacuation flow exceeds 55% of hourly capacity.
+//
+// Each sign shows:
+//   ⚠ BOTTLENECK  (header, red if >100% cap, amber if 55-100%)
+//   [capacity bar]
+//   Road class + capacity %
+//   Action hint (enable contraflow)
+//
+// Signs billboard toward the camera so they're readable from any angle.
+// Severity drives size: worst bottleneck = tallest sign.
 
 import * as THREE from 'three';
+
+const HWY_LABEL = {
+  motorway: 'I-15 (motorway)',
+  trunk:    'SR-67 (trunk)',
+  primary:  'primary road',
+  secondary:'secondary road',
+  residential: 'residential',
+};
 
 export class BottleneckMarker {
   constructor(scenario, terrain) {
     this.scenario = scenario;
-    this.terrain = terrain;
-    this.group = new THREE.Group();
+    this.terrain  = terrain;
+    this.group    = new THREE.Group();
     this.group.name = 'bottlenecks';
-    this.markers = [];
-    this._lastSnap = null;
+    this.markers  = [];
     this._evacMode = false;
   }
 
@@ -19,74 +35,114 @@ export class BottleneckMarker {
   }
 
   applySnapshot(snap) {
-    this._lastSnap = snap;
     while (this.group.children.length) this.group.remove(this.group.children[0]);
     this.markers = [];
     if (!snap?.evacuation?.bottlenecks) return;
+
     for (const b of snap.evacuation.bottlenecks) {
       const e = this.scenario.edges.find(x => x.id === b.edgeId);
       if (!e) continue;
-      const A = this.scenario.nodes[e.u], B = this.scenario.nodes[e.v];
-      const mid = this.terrain.gridToWorld(
-        (A.x + B.x) / 2, (A.z + B.z) / 2, 0.05
-      );
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.05, 0.085, 24),
-        new THREE.MeshBasicMaterial({
-          color: 0xffa040, transparent: true, opacity: 0.85,
-          side: THREE.DoubleSide, depthWrite: false
-        })
-      );
-      ring.position.copy(mid);
-      ring.rotation.x = -Math.PI / 2;
-      ring.renderOrder = 7;
-      this.group.add(ring);
+      const A = this.scenario.nodes[e.u];
+      const B = this.scenario.nodes[e.v];
+      const mid = this.terrain.gridToWorld((A.x + B.x) / 2, (A.z + B.z) / 2, 0.08);
 
-      // Small floating label above the ring showing capacity %, hwy class
-      const pct = Math.round(b.ratio * 100);
-      const label = this._makeLabel(`${pct}% · ${e.hwy}`, mid);
-      this.group.add(label);
+      const pct    = Math.round(b.ratio * 100);
+      const isCrit = b.ratio >= 1.0;
+      const label  = HWY_LABEL[e.hwy] || e.hwy || 'road';
+      const scale  = 0.9 + Math.min(b.ratio, 2.0) * 0.25;  // bigger = worse
 
-      this.markers.push({ ring, label, ratio: b.ratio });
+      const billboard = this._makeBillboard(pct, label, isCrit, e.hwy);
+      billboard.position.copy(mid);
+      billboard.position.y += 0.18 * scale;
+      billboard.scale.setScalar(scale);
+      billboard.renderOrder = 9;
+      this.group.add(billboard);
+
+      // Subtle vertical stem connecting billboard to road surface
+      const stemGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(mid.x, mid.y, mid.z),
+        new THREE.Vector3(mid.x, mid.y + 0.18 * scale, mid.z),
+      ]);
+      const stem = new THREE.Line(stemGeo, new THREE.LineBasicMaterial({
+        color: isCrit ? 0xff4040 : 0xffa040,
+        transparent: true, opacity: 0.5
+      }));
+      stem.renderOrder = 8;
+      this.group.add(stem);
+
+      this.markers.push({ billboard, stem, isCrit, ratio: b.ratio });
     }
   }
 
-  _makeLabel(text, pos) {
+  _makeBillboard(pct, label, isCrit, hwyType) {
+    const W = 256, H = 100;
     const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 32;
+    canvas.width  = W;
+    canvas.height = H;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'rgba(30,20,10,0.75)';
+
+    // Background
+    const bg = isCrit ? 'rgba(200,30,30,0.92)' : 'rgba(190,100,0,0.92)';
+    ctx.fillStyle = bg;
     ctx.beginPath();
-    ctx.roundRect(2, 2, canvas.width - 4, canvas.height - 4, 6);
+    ctx.roundRect(0, 0, W, H, 8);
     ctx.fill();
-    ctx.font = 'bold 14px monospace';
-    ctx.fillStyle = '#ffa040';
-    ctx.textAlign = 'center';
+
+    // Top stripe: warning icon + BOTTLENECK label
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, W, 32);
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+    ctx.fillText('⚠', 10, 16);
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('BOTTLENECK', 36, 16);
+
+    // Capacity % (large)
+    ctx.font = 'bold 22px monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${pct}%`, W - 10, 16);
+
+    // Capacity bar
+    const barY = 38, barH = 10, barW = W - 20;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(10, barY, barW, barH);
+    const fill = Math.min(pct / 200, 1);  // bar saturates at 200%
+    ctx.fillStyle = isCrit ? '#ff6060' : '#ffcc60';
+    ctx.fillRect(10, barY, barW * fill, barH);
+
+    // Road label
+    ctx.font = '12px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, 10, 64);
+
+    // Action hint
+    const hint = hwyType === 'motorway' ? '→ "Contraflow I-15"'
+               : hwyType === 'trunk'    ? '→ "Contraflow SR-67"'
+               : '→ Enable contraflow';
+    ctx.font = '11px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillText(hint, 10, 84);
+
     const tex = new THREE.CanvasTexture(canvas);
     const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.32, 0.08),
+      new THREE.PlaneGeometry(0.52, 0.205),   // world-space size
       new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
     );
-    mesh.position.set(pos.x, pos.y + 0.1, pos.z);
-    mesh.renderOrder = 9;
     return mesh;
   }
 
   update(dt, camera) {
-    const t = performance.now() / 400;
-    const em = this._evacMode;
+    const t = performance.now();
     for (const m of this.markers) {
-      // In evacuate mode: larger rings, higher base opacity, faster pulse
-      const period = em ? 250 : 400;
-      const baseScale = em ? 1.4 : 1.0;
-      const s = baseScale * (1 + 0.30 * Math.sin(performance.now() / period));
-      m.ring.scale.setScalar(s);
-      m.ring.material.opacity = em
-        ? 0.75 + 0.25 * Math.abs(Math.sin(performance.now() / period))
-        : 0.55 + 0.4 * Math.abs(Math.sin(t));
-      if (m.label && camera) m.label.lookAt(camera.position);
+      if (camera) m.billboard.lookAt(camera.position);
+      // Pulse opacity: crit flashes faster
+      const period = (this._evacMode || m.isCrit) ? 350 : 600;
+      const pulse  = 0.75 + 0.25 * Math.abs(Math.sin(t / period));
+      m.billboard.material.opacity = pulse;
     }
   }
 }
