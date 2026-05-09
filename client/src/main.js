@@ -11,7 +11,6 @@ import { EmberAnimator } from './fire/EmberAnimator.js';
 import { RoadRenderer } from './evacuation/RoadRenderer.js';
 import { ZoneRenderer } from './evacuation/ZoneRenderer.js';
 import { RouteAnimator } from './evacuation/RouteAnimator.js';
-import { BottleneckMarker } from './evacuation/BottleneckMarker.js';
 import { ShelterMarker } from './evacuation/ShelterMarker.js';
 import { PopulationDots } from './evacuation/PopulationDots.js';
 import { ContraflowAnimator } from './evacuation/ContraflowAnimator.js';
@@ -46,7 +45,6 @@ class App {
     this.roads = null;
     this.zones = null;
     this.routes = null;
-    this.bottlenecks = null;
     this.shelters = null;
     this.populations = null;
     this.contraflow = null;
@@ -239,7 +237,6 @@ class App {
     if (this.roads)        this.roads.setEvacMode(isEvac);
     if (this.zones)        this.zones.setEvacMode(isEvac);
     if (this.routes)       this.routes.setEvacMode(isEvac);
-    if (this.bottlenecks)  this.bottlenecks.setEvacMode(isEvac);
     if (this.shelters)     this.shelters.setEvacMode(isEvac);
     if (this.populations)  this.populations.setEvacMode(isEvac);
     if (this.contraflow)   this.contraflow.setEvacMode(isEvac);
@@ -298,9 +295,6 @@ class App {
 
     this.routes = new RouteAnimator(this.scenario, this.terrain);
     sg.add(this.routes.group);
-
-    this.bottlenecks = new BottleneckMarker(this.scenario, this.terrain);
-    sg.add(this.bottlenecks.group);
 
     this.contraflow = new ContraflowAnimator(this.scenario, this.terrain);
     sg.add(this.contraflow.group);
@@ -388,7 +382,6 @@ class App {
   _applyEvacuationToScene(snap) {
     if (this.zones) this.zones.applySnapshot(snap);
     if (this.routes) this.routes.applySnapshot(snap);
-    if (this.bottlenecks) this.bottlenecks.applySnapshot(snap);
     if (this.populations) this.populations.applySnapshot(snap);
 
     // Route invariant: every zone with a computed route shows its escape
@@ -487,7 +480,6 @@ class App {
     if (this.roads) this.roads.update(dt);
     if (this.routes) this.routes.update(dt);
     if (this.populations) this.populations.update(dt);
-    if (this.bottlenecks) this.bottlenecks.update(dt, this.scene.camera);
     if (this.zones) this.zones.update(dt);
     if (this.contraflow) this.contraflow.update(dt);
     if (this.proactive) this.proactive.update(dt, this.scene.camera);
