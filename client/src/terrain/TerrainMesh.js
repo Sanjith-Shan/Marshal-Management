@@ -5,8 +5,8 @@
 
 import * as THREE from 'three';
 
-const TERRAIN_WORLD = 14;         // plane width in scene units (bbox expanded to cover SD coast → Cedar Creek)
-const TERRAIN_HEIGHT = 1.5;       // peak displacement (scaled with TERRAIN_WORLD)
+const TERRAIN_WORLD = 12;         // plane width in scene units; bbox shrunk slightly + east trimmed
+const TERRAIN_HEIGHT = 1.3;       // peak displacement (scaled with TERRAIN_WORLD)
 const SEG = 159;                  // heightmap is 128, geometry segments slightly more for smooth edges
 
 export class TerrainMesh {

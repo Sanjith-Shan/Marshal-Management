@@ -11,18 +11,18 @@ const GRID = 128;          // CA grid resolution
 const WORLD_M = 24_000;    // 24 km world span (scene-units anchor; not real meters)
 const M_PER_CELL = WORLD_M / GRID;
 
-// Real-world bounding box: extended Cedar Corridor / west San Diego.
-// Reaches the Pacific coast in the west (UCSD / La Jolla / Mission Beach),
-// north toward Encinitas, south toward Imperial Beach / Chula Vista, and
-// east into Cleveland NF past Cedar Creek. Contains all original demo
-// targets (Scripps Ranch, Poway, Ramona, Qualcomm Stadium, Cedar Creek
-// ignition at 33.0356, -116.7) and a much richer real-world surround
-// for the visual demo.
+// Real-world bounding box: middle ground between the original tight
+// Cedar Corridor and the over-extended SD-county view that lagged the
+// renderer. East is trimmed (Cleveland NF mountains were "boring");
+// west keeps the Pacific coast (UCSD / La Jolla / Mission Beach); N/S
+// pulled in slightly. Cedar Creek ignition (33.0356, -116.7) still
+// inside; Qualcomm Stadium (32.7831, -117.1196) still inside.
 //
-// All real lat/lng inputs are projected into the 128×128 grid via this bbox.
+// Approx 53 × 63 km. ~30% smaller than the prior 67 × 72 km, ~70%
+// larger than the original 39 × 47 km.
 export const BBOX = {
-  latMin: 32.62, latMax: 33.22,        // ~66.6 km tall (lat: 111 km/°)
-  lngMin: -117.32, lngMax: -116.55,    // ~71.6 km wide at 33°N (lng: 93 km/°)
+  latMin: 32.68, latMax: 33.16,        // ~53.3 km tall (lat: 111 km/°)
+  lngMin: -117.30, lngMax: -116.62,    // ~63.3 km wide at 33°N (lng: 93 km/°)
 };
 const BBOX_WIDTH_M = (BBOX.lngMax - BBOX.lngMin) * 93_000;
 const BBOX_HEIGHT_M = (BBOX.latMax - BBOX.latMin) * 111_000;

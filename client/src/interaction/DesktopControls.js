@@ -9,17 +9,16 @@ export class DesktopControls {
     this.camera = camera;
     this.canvas = canvas;
     this.target = terrainGroup;
-    this.distance = 22;            // initial camera distance (bigger bbox + bigger TERRAIN_WORLD)
+    this.distance = 18;            // fits the trimmed bbox at startup
     this.MIN_DIST = 2.0;
-    this.MAX_DIST = 90;
+    this.MAX_DIST = 80;
     this.azimuth = 0.6;            // rad
     this.elevation = 0.65;         // rad above horizon
-    // Default focal point: populated cluster centroid in the expanded
-    // bbox (Mira Mesa / Scripps Ranch / Poway / Qualcomm corridor).
-    // Slight west bias so the SD coast is in view; east mountains are
-    // visible but off-center. The fire ignites east of Ramona — visible
-    // as fire arrives in the inhabited belt.
-    this.center = new THREE.Vector3(-1.5, 0, 0.0);
+    // Default focal point: slight west + slight north of geometric centre
+    // — populated cluster (Mira Mesa / Scripps Ranch / Poway / Qualcomm)
+    // sits SW; Cedar Creek ignition is east-north. Camera pose splits
+    // the difference so both are in frame from the start.
+    this.center = new THREE.Vector3(-1.0, 0, -0.5);
     this.dragging = false;
     this.last = { x: 0, y: 0 };
     this._dragPixels = 0;
@@ -81,10 +80,10 @@ export class DesktopControls {
   }
 
   resetView() {
-    this.distance = 22;
+    this.distance = 18;
     this.azimuth = 0.6;
     this.elevation = 0.65;
-    this.center.set(-1.5, 0, 0.0);
+    this.center.set(-1.0, 0, -0.5);
   }
 
   update(dt) {

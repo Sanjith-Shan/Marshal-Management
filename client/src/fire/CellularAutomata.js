@@ -32,7 +32,7 @@ const FUEL_BURN_DURATION = [
   6,    // urban
 ];
 
-const STEP_INTERVAL = 1.0;        // seconds of wall time per CA step
+const STEP_INTERVAL = 2.0;        // seconds of wall time per CA step (slowed 2x for demo legibility)
 
 export class CellularAutomata {
   constructor(scenario) {
