@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-05-09 — fire CA: slope floor + grass burn duration
+
+Two defects in `client/src/fire/CellularAutomata.js`:
+1. `slopeFactor = Math.exp(0.05 * slope)` penalized downhill spread (Rothermel gives no downhill penalty). Fixed with `Math.max(0, slope)` so only uphill accelerates spread.
+2. Grass burn duration 3 steps (1.5 sim-min) gave only a 34% per-neighbor ignition chance upwind, causing stochastic extinction on thin fronts. Raised to 6 steps → 57% per-neighbor, 92% chance of spreading to at least one upwind cell.
+
+Known Gaps #14 (slope physics not re-tuned for real DEM) resolved.
+
+---
+
 ## 2026-05-09 — session 20 (dot direction, cluster unblock, shelter visibility, more zones)
 
 User-reported issues after session 19:

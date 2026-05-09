@@ -26,7 +26,7 @@ const FUEL_SPREAD = [
 ];
 const FUEL_BURN_DURATION = [
   0,    // rock
-  3,    // grass: 3 steps to burn out
+  6,    // grass: 6 steps to burn out
   8,    // chaparral
   12,   // timber
   6,    // urban
@@ -155,7 +155,7 @@ export class CellularAutomata {
 
             // Slope: uphill = faster (e^{0.06*slope%})
             const slope = (h[ni] - h[i]) * 50;       // ~ percent grade after scaling
-            const slopeFactor = Math.exp(0.05 * slope);
+            const slopeFactor = Math.exp(0.05 * Math.max(0, slope));
 
             // Wind alignment: dot of (dx,dy) normalized with wind toward
             const dl = Math.hypot(dx, dy);
