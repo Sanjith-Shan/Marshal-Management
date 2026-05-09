@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Marshal Management — AR Fire Command</title>
     <link rel="stylesheet" href="/src/ui/styles.css" />
+    <script>
+      (function () {
+        function show(msg) {
+          var el = document.getElementById('__errbox');
+          if (!el) {
+            el = document.createElement('div');
+            el.id = '__errbox';
+            el.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:99999;background:#400;color:#fff;font:14px/1.35 monospace;padding:10px 12px;border:2px solid #f44;border-radius:6px;max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word';
+            (document.body || document.documentElement).appendChild(el);
+          }
+          el.textContent += msg + '\n\n';
+        }
+        window.addEventListener('error', function (e) {
+          show('ERROR: ' + (e.message || '?') + '\n@ ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?') + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          show('PROMISE: ' + (r && r.message ? r.message : String(r)) + (r && r.stack ? '\n' + r.stack : ''));
+        });
+        window.__qlog = function (s) { show('LOG: ' + s); };
+      })();
+    </script>
   </head>
   <body>
     <div id="app">
