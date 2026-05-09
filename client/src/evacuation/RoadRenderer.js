@@ -21,8 +21,9 @@ export class RoadRenderer {
     this.group.add(this._blockedXGroup);
     this._blockedXMap = new Map();   // edgeId -> THREE.Mesh (the X marker)
     this._hoverEdgeId = null;
-    this._primarySet   = new Set();
-    this._secondarySet = new Set();
+    this._primarySet    = new Set();
+    this._secondarySet  = new Set();
+    this._fireBlockedSet = new Set();
     this._evacMode = false;
     this._targetRoadOpacity = 0.85;
   }
@@ -147,59 +148,68 @@ export class RoadRenderer {
   setRoutePrimary(edgeIds, secondaryEdgeIds = []) {
     this._primarySet   = new Set(edgeIds);
     this._secondarySet = new Set(secondaryEdgeIds);
+    this._recolorAll();
+  }
+
+  // Edges where fire has reached are styled "charred" — distinct from the
+  // user-blocked red so the marshal can tell at a glance which roads they
+  // closed vs which roads the fire took. No X marker (only user blocks
+  // get the X — fire-blocked roads are already not viable for routing).
+  applyFireBlocking(edgeIds) {
+    const newSet = new Set(edgeIds);
+    if (newSet.size === this._fireBlockedSet.size) {
+      let same = true;
+      for (const id of newSet) if (!this._fireBlockedSet.has(id)) { same = false; break; }
+      if (same) return;
+    }
+    const changed = new Set();
+    for (const id of newSet) if (!this._fireBlockedSet.has(id)) changed.add(id);
+    for (const id of this._fireBlockedSet) if (!newSet.has(id)) changed.add(id);
+    this._fireBlockedSet = newSet;
+    if (!changed.size) return;
     const colors = this.lines.geometry.attributes.color;
     const arr = colors.array;
-    arr.set(this._origColors);
-    for (const [eid, meta] of this._edgeMeta) {
-      let r, g, b;
-      if (this._primarySet.has(eid))        { r = 0.36; g = 0.93; b = 0.55; }
-      else if (this._secondarySet.has(eid)) { r = 0.22; g = 0.68; b = 0.45; }
-      else continue;
-      for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
-        arr[v * 3 + 0] = r;
-        arr[v * 3 + 1] = g;
-        arr[v * 3 + 2] = b;
-      }
-    }
+    for (const id of changed) this._recolorEdge(arr, id);
     colors.needsUpdate = true;
   }
 
-  // Hover highlight in COMMAND mode. Restores the previous hovered edge to
-  // whatever its logical state was (blocked, route, original).
+  _recolorAll() {
+    const colors = this.lines.geometry.attributes.color;
+    const arr = colors.array;
+    arr.set(this._origColors);
+    for (const eid of this._edgeMeta.keys()) this._recolorEdge(arr, eid);
+    colors.needsUpdate = true;
+  }
+
+  // Hover highlight in COMMAND mode. The previous hovered edge restores to
+  // whatever its logical state (fire-blocked / user-blocked / route /
+  // original) via _recolorEdge.
   setHover(edgeId) {
     if (this._hoverEdgeId === edgeId) return;
     const colors = this.lines.geometry.attributes.color;
     const arr = colors.array;
-
-    // Restore previous hovered edge
-    if (this._hoverEdgeId !== null) {
-      this._writeEdgeColor(arr, this._hoverEdgeId, false);
-    }
+    const prev = this._hoverEdgeId;
     this._hoverEdgeId = edgeId;
-
-    // Apply hover color to new edge
-    if (edgeId !== null) {
-      const meta = this._edgeMeta.get(edgeId);
-      if (meta) {
-        for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
-          arr[v * 3 + 0] = 1.0;
-          arr[v * 3 + 1] = 0.92;
-          arr[v * 3 + 2] = 0.35;   // warm yellow hover
-        }
-      }
-    }
+    if (prev !== null) this._recolorEdge(arr, prev);
+    if (edgeId !== null) this._recolorEdge(arr, edgeId);
     colors.needsUpdate = true;
   }
 
-  _writeEdgeColor(arr, edgeId, isHover) {
+  // Single source of truth for edge color. Priority: hover > user-blocked
+  // (red, plus X marker handled separately) > fire-blocked (charred dark
+  // gray) > contraflow (cyan) > primary route (bright green) > secondary
+  // route (dim green) > original.
+  _recolorEdge(arr, edgeId) {
     const meta = this._edgeMeta.get(edgeId);
     if (!meta) return;
     const e = this.scenario.edges.find(ed => ed.id === edgeId);
     let r, g, b;
-    if (e?.blocked)                         { r = 1.0;  g = 0.25; b = 0.25; }
-    else if (e?.contra)                     { r = 0.45; g = 0.85; b = 1.0;  }
-    else if (this._primarySet.has(edgeId))  { r = 0.36; g = 0.93; b = 0.55; }
-    else if (this._secondarySet.has(edgeId)){ r = 0.22; g = 0.68; b = 0.45; }
+    if (this._hoverEdgeId === edgeId)        { r = 1.0;  g = 0.92; b = 0.35; }
+    else if (e?.blocked)                     { r = 1.0;  g = 0.25; b = 0.25; }
+    else if (this._fireBlockedSet.has(edgeId)){ r = 0.20; g = 0.18; b = 0.18; }  // charred
+    else if (e?.contra)                      { r = 0.45; g = 0.85; b = 1.0;  }
+    else if (this._primarySet.has(edgeId))   { r = 0.36; g = 0.93; b = 0.55; }
+    else if (this._secondarySet.has(edgeId)) { r = 0.22; g = 0.68; b = 0.45; }
     else {
       const ic = meta.startVertex * 3;
       r = this._origColors[ic + 0];
@@ -218,20 +228,8 @@ export class RoadRenderer {
     if (!meta) return;
     const colors = this.lines.geometry.attributes.color;
     const arr = colors.array;
-    let r = 0.65, g = 0.75, b = 0.85;
-    if (u.blocked) { r = 1.0; g = 0.25; b = 0.25; }
-    else if (u.contra) { r = 0.45; g = 0.85; b = 1.0; }
-    else {
-      const ic = meta.startVertex * 3;
-      r = this._origColors[ic + 0];
-      g = this._origColors[ic + 1];
-      b = this._origColors[ic + 2];
-    }
-    for (let v = meta.startVertex; v < meta.startVertex + meta.count; v++) {
-      arr[v * 3 + 0] = r;
-      arr[v * 3 + 1] = g;
-      arr[v * 3 + 2] = b;
-    }
+    // Edge.blocked / .contra are already updated in scenario.edges by main.js.
+    this._recolorEdge(arr, u.id);
     colors.needsUpdate = true;
 
     // Blocked X marker: add on block, remove on unblock.

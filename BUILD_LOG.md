@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-05-08 — session 15 (Tier D: fire-blocked styling + onboarding overlay)
+
+Continuing per session 13's plan after Tier A. Picking the two highest-value Tier D items.
+
+**D4 — distinct fire-blocked vs user-blocked road styling.** Previously, when fire reached a road the engine silently dropped it from routing but the road kept its original color; user-blocked roads got the red + X marker. The marshal couldn't distinguish "this road I closed" from "this road the fire took." Now:
+
+- New `_fireBlockedSet` on `RoadRenderer`. Charred dark gray (`rgb(0.20, 0.18, 0.18)`) is visually distinct from user-blocked red and never gets the X marker (because the user didn't close it — the fire did).
+- Refactored color-application to a single `_recolorEdge(arr, edgeId)` method with a strict priority order: hover > user-blocked > fire-blocked > contraflow > primary route > secondary route > original. Replaces ad-hoc inline coloring across `setRoutePrimary`, `setHover`, `applyEdgeUpdate`, `_writeEdgeColor` (deleted) — all four paths now flow through `_recolorEdge`.
+- New `_recolorAll()` for full repaint, used by `setRoutePrimary` after route changes so fire-blocked / user-blocked / contraflow styling survives.
+- New `applyFireBlocking(edgeIds)` with dirty-tracking — only repaints edges whose blocked state actually changed (vs full repaint every tick). At 15k OSM edges this matters.
+- `main.js` adds `_refreshFireBlockedEdges(simTimeMin)`: builds a Map of node-id → arrival from `fireCA.arrivalByNode(scenario.nodes)`, walks `scenario.edges`, marks any edge where `min(arrival[u], arrival[v]) <= simTimeMin` as fire-blocked. Called on every server tick + on time-jump applied + on time-rewind.
+
+The visual delta during a demo: as fire spreads, the affected road segments visibly char to dark gray while remaining edges stay bright. User-closed roads still pulse red+X. The marshal can read the map at a glance: red = "I closed it", gray = "fire took it", green = "active route", cyan = "contraflow."
+
+**D2 — onboarding overlay.** The previous `?` help was a flat keybinding table. Replaced with a structured onboarding card:
+
+- Section 1: **Modes** — color-coded pills (MONITOR / COMMAND / EVACUATE) with one-line action descriptions, so judges immediately understand what each mode does.
+- Section 2: **Essentials** — E (evac), Space (PTT), 1–4 (panels), P (pause), F (perimeter), R (reset).
+- Section 3: **Camera** — drag, WASD, wheel/Q/Z, time-jump.
+- Section 4: **Voice commands** — five concrete examples ("Upgrade Poway to GO", "Block I-15", etc.) with green-tinted left borders so they stand out as actionable.
+- Section 5: **What's real** — green-banded note listing live data sources (NWS / OpenAI / FIRMS / Census / OSM / 3DEP / NIFC), plus the HUD badge previews so users know what to look for.
+
+Auto-shown on first launch via `localStorage` `mm.helpSeen` flag (set when user clicks "Got it"). Subsequent loads stay quiet; `?` button + Shift+/ keybinding still work to re-open.
+
+CSS additions: `.help-section`, `.help-mode-row` (with mon/cmd/evac variants), `.help-voice`, `.help-real`, `.help-pill`. Help card max-width bumped 520 → 640 px and given `max-height: 88vh; overflow-y: auto` so it scrolls on narrow viewports.
+
+**Verification.** `npm run build` clean, selftest 25/25, e2e 14/14.
+
+**Tier D status**: D4 ✅ done, D2 ✅ done. Remaining: D1 performance audit (needs in-browser profiling), D3 routes change animation, D5 voice transcription preview, D6 demo savepoints. Lower priority than current state.
+
+---
+
 ## 2026-05-08 — session 14 (Tier A: NIFC perimeter + Census tracts + map expansion)
 
 Working through Tier A from session 13's plan. A1 LANDFIRE explicitly deferred — full FBFM40 ingestion requires multi-band raster parsing (TIFF / lerc) that isn't tractable in this session; procedural fuel grid stays.

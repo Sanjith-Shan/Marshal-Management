@@ -103,12 +103,9 @@ class App {
 
     this.socket.on('tick', ({ simTimeMin }) => {
       this.hud.setSimTime(simTimeMin);
-      // Sync fire CA's clock to the server's authoritative sim clock so
-      // arrival times stamp with the same minute the user sees in the HUD.
-      // The CA still steps locally on its own STEP_INTERVAL; this just
-      // anchors the timestamp.
       if (this.fireCA) this.fireCA.simMinutes = simTimeMin;
       this._maybeSnapCA(simTimeMin);
+      this._refreshFireBlockedEdges(simTimeMin);
     });
 
     this.socket.on('time-fast-forward', ({ steps, targetMin }) => {
@@ -129,6 +126,7 @@ class App {
       // Take an immediate CA snapshot at the new time so a follow-up rewind
       // can return here.
       this._maybeSnapCA(targetMin, true);
+      this._refreshFireBlockedEdges(targetMin);
       if (this.fireOverlay) this.fireOverlay.update(0);
     });
 
@@ -147,6 +145,7 @@ class App {
       // After-target snapshots are now alternate futures — discard.
       this.caRing = this.caRing.filter(e => e.simMin <= targetMin);
       this._lastCaSnapMin = entry ? entry.simMin : -Infinity;
+      this._refreshFireBlockedEdges(targetMin);
       if (this.fireOverlay) this.fireOverlay.update(0);
     });
 
@@ -335,6 +334,31 @@ class App {
         arrivalByNode: this.fireCA.arrivalByNode(this.scenario.nodes)
       });
     };
+  }
+
+  // Compute the set of edges whose endpoints have already been reached by
+  // fire (arrival <= current sim clock) and tell RoadRenderer to style
+  // them as charred (distinct from the red user-blocked styling).
+  _refreshFireBlockedEdges(simTimeMin) {
+    if (!this.fireCA || !this.roads || !this.scenario?.edges) return;
+    const arrivalArr = this.fireCA.arrivalByNode(this.scenario.nodes);
+    const arrivalMap = new Map();
+    for (const [id, m] of arrivalArr) {
+      if (Number.isFinite(m) && m < 999) arrivalMap.set(id, m);
+    }
+    if (arrivalMap.size === 0) {
+      this.roads.applyFireBlocking([]);
+      return;
+    }
+    const fireBlocked = [];
+    for (const e of this.scenario.edges) {
+      const au = arrivalMap.get(e.u);
+      const av = arrivalMap.get(e.v);
+      if (au == null && av == null) continue;
+      const fa = Math.min(au ?? Infinity, av ?? Infinity);
+      if (fa <= simTimeMin) fireBlocked.push(e.id);
+    }
+    this.roads.applyFireBlocking(fireBlocked);
   }
 
   _maybeSnapCA(simMin, force = false) {

@@ -17,7 +17,18 @@ export class HUD {
     this._scenarioStartTotalMin = 17 * 60 + 37;  // default Cedar 2003 ignition (17:37)
 
     document.getElementById('btn-help').addEventListener('click', () => this.showHelp(true));
-    document.getElementById('help-close').addEventListener('click', () => this.showHelp(false));
+    document.getElementById('help-close').addEventListener('click', () => {
+      this.showHelp(false);
+      try { localStorage.setItem('mm.helpSeen', '1'); } catch {}
+    });
+    // Auto-show on first launch so judges know what they're looking at.
+    try {
+      const seen = localStorage.getItem('mm.helpSeen') === '1';
+      if (!seen) {
+        // Defer briefly so the scene appears behind the overlay first.
+        setTimeout(() => this.showHelp(true), 600);
+      }
+    } catch {}
     document.getElementById('btn-evacuate').addEventListener('click', () => {
       this.socket.emit('action', { type: 'evacuate' });
     });

@@ -62,20 +62,54 @@
 
         <div id="help-overlay" class="hidden">
           <div class="help-card">
-            <h2>Marshal Command Controls</h2>
-            <div class="help-grid">
-              <div><kbd>1</kbd>–<kbd>4</kbd></div><div>Toggle floating panels</div>
-              <div><kbd>WASD</kbd> / Mouse drag</div><div>Rotate &amp; pan terrain</div>
-              <div><kbd>Q</kbd> / <kbd>Z</kbd></div><div>Zoom in / out</div>
-              <div><kbd>Space</kbd> (hold)</div><div>Push-to-talk to AI advisor</div>
-              <div><kbd>E</kbd></div><div>Trigger evacuation engine</div>
-              <div><kbd>M</kbd></div><div>Cycle Monitor / Command / Evacuate mode</div>
-              <div><kbd>R</kbd></div><div>Reset scenario</div>
-              <div><kbd>T</kbd></div><div>Toggle timeline scrubber</div>
-              <div><kbd>]</kbd> / <kbd>[</kbd></div><div>Jump sim time ±30 min (Shift = ±60)</div>
-              <div>Click road</div><div>(Command mode) toggle blocked</div>
+            <h2>Marshal Management — Quick Start</h2>
+
+            <h3 class="help-section">Modes (cycle with <kbd>M</kbd>)</h3>
+            <div class="help-mode-row mon">
+              <span class="help-mode-tag">MONITOR</span>
+              <span>Passive observation. Default cursor, no terrain interaction.</span>
             </div>
-            <button class="help-close" id="help-close">Close</button>
+            <div class="help-mode-row cmd">
+              <span class="help-mode-tag">COMMAND</span>
+              <span>Cross-hair cursor; hover roads to highlight; <b>click to block / unblock</b>. Voice commands active.</span>
+            </div>
+            <div class="help-mode-row evac">
+              <span class="help-mode-tag">EVACUATE</span>
+              <span>Auto-opens Evac panel; fire dims, routes brighten. <b>Click any zone</b> to cycle level (READY → SET → GO).</span>
+            </div>
+
+            <h3 class="help-section">Essentials</h3>
+            <div class="help-grid">
+              <div><kbd>E</kbd></div><div>Run evacuation engine</div>
+              <div><kbd>Space</kbd> (hold)</div><div>Push-to-talk to AI advisor</div>
+              <div><kbd>1</kbd>–<kbd>4</kbd></div><div>Toggle Weather / Evac / AI / Video panels</div>
+              <div><kbd>P</kbd></div><div>Pause / resume simulation</div>
+              <div><kbd>F</kbd></div><div>Toggle real 2003 Cedar Fire footprint (NIFC)</div>
+              <div><kbd>R</kbd></div><div>Reset scenario (or use scenario picker)</div>
+            </div>
+
+            <h3 class="help-section">Camera</h3>
+            <div class="help-grid">
+              <div>Mouse drag / <kbd>WASD</kbd></div><div>Rotate &amp; pan terrain</div>
+              <div>Wheel / <kbd>Q</kbd> / <kbd>Z</kbd></div><div>Zoom in / out (range 2–70)</div>
+              <div><kbd>]</kbd> / <kbd>[</kbd></div><div>Jump sim time ±30 min (Shift = ±60)</div>
+            </div>
+
+            <h3 class="help-section">Voice commands (hold Space then speak)</h3>
+            <div class="help-voice">
+              <div>"What's the biggest risk right now?"</div>
+              <div>"Upgrade Poway to GO" — escalates a zone</div>
+              <div>"Block I-15" / "Reopen I-15" — closes/opens a road class</div>
+              <div>"Enable contraflow on SR-67" — doubles outbound capacity</div>
+              <div>"Trigger evacuation for Zone A" — A=Scripps Ranch, B=Poway, C=Ramona</div>
+            </div>
+
+            <h3 class="help-section">What's real</h3>
+            <div class="help-real">
+              Live: <b>NWS</b> wind, <b>OpenAI gpt-4o-mini</b> advisor, <b>NASA FIRMS</b> CA hotspots, <b>US Census ACS 2022</b> populations, <b>OSM</b> roads (12,800 nodes), <b>USGS 3DEP</b> elevation (7&#8239;m–1259&#8239;m), <b>NIFC</b> 2003 Cedar Fire perimeter (270,686 acres). Status badges in the top bar (<span class="help-pill">🌐 OSM+3DEP</span>, <span class="help-pill warn">🛰 N CA hotspots</span>) confirm what's loaded.
+            </div>
+
+            <button class="help-close" id="help-close">Got it</button>
           </div>
         </div>
 
