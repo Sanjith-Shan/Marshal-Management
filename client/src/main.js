@@ -7,6 +7,7 @@ import { ARSession } from './ar/ARSession.js';
 import { TerrainMesh } from './terrain/TerrainMesh.js';
 import { FireOverlay } from './fire/FireOverlay.js';
 import { CellularAutomata } from './fire/CellularAutomata.js';
+import { EmberAnimator } from './fire/EmberAnimator.js';
 import { RoadRenderer } from './evacuation/RoadRenderer.js';
 import { ZoneRenderer } from './evacuation/ZoneRenderer.js';
 import { RouteAnimator } from './evacuation/RouteAnimator.js';
@@ -54,6 +55,7 @@ class App {
     this.compass = null;
     this.windInd = null;
     this.perimeter = null;
+    this.embers = null;
 
     this._currentMode = 'MONITOR';
 
@@ -319,6 +321,9 @@ class App {
     this.fireOverlay = new FireOverlay(this.scenario, this.terrain, this.fireCA);
     sg.add(this.fireOverlay.mesh);
 
+    this.embers = new EmberAnimator(this.terrain);
+    sg.add(this.embers.group);
+
     this._wireFireCAUpdates();
 
     if (this.snapshot) this._applyEvacuationToScene(this.snapshot);
@@ -467,6 +472,12 @@ class App {
     } else if (this.fireCA && this.ar.active) {
       this.fireCA.step(dt);
       this.fireOverlay.update(dt);
+    }
+    // Drain ember-spotting events from the CA into the animator each frame.
+    if (this.fireCA && this.embers) {
+      const ev = this.fireCA.consumeEmberEvents();
+      if (ev) for (const e of ev) this.embers.spawn(e.from, e.to);
+      this.embers.update(dt);
     }
     if (this.roads) this.roads.update(dt);
     if (this.routes) this.routes.update(dt);

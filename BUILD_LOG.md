@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-05-08 — session 17 (E2 ember particles + map expansion + west-focus camera)
+
+User asked for the visible ember-spotting visualization (E2) to be minimal and not distracting, plus a bigger / west-focused map since population is concentrated west of the current geographic center.
+
+**E2 — minimal ember-spotting particles:**
+
+The CA's ember-spotting code (active when `windKph > 25`, ~30% per step) fires silently today. Wind is the dominant fire driver in Santa Ana conditions but the user can't see embers being thrown ahead of the perimeter.
+
+- `CellularAutomata` now records each successful ember ignition as `{ from: {gx,gy}, to: {gx,gy} }` in a bounded queue (max 60 to survive a stalled frame). New `consumeEmberEvents()` drains and clears the queue per frame.
+- New `client/src/fire/EmberAnimator.js` — a single fixed-pool `THREE.Points` cloud (25 slots max). Each ember spawns a single small warm-orange particle (size 0.07, additive blending) that arcs from source to landing cell over **1.2 seconds** with a parabolic vertical lift (peak 0.4 scene units), then parks below the scene to free its slot.
+- Render loop drains `consumeEmberEvents()` after the CA step each frame. `embers.update(dt)` advances active arcs.
+
+Visual: in default 35 kph wind, you'll see a single orange spark fly NE from the perimeter every ~3 seconds. In 60 kph Santa Ana conditions (Cedar 2003 historical wind), you'll see 3–8 sparks at once arcing ahead of the front. Communicates the wind/spotting interaction without overwhelming the rest of the scene.
+
+Tuned values (per "minimal, not too distracting"):
+- `MAX_ACTIVE = 25` (caps simultaneous embers)
+- `LIFETIME_MS = 1200` (short, doesn't linger)
+- `SIZE = 0.07`, `COLOR = 0xffa844` (warm orange)
+- `ARC_HEIGHT = 0.4` scene units (shallow arc; doesn't dominate vertical space)
+
+**Map expansion + west-focus camera:**
+
+Before: `TERRAIN_WORLD = 9`, camera centered at world origin (0,0,0) which corresponds to grid (64, 64) — sparse mountain terrain east of Poway. Populated cluster (Mira Mesa, Scripps Ranch, Poway) is at world-space x ≈ −5 to −3 (grid gx 5–29). Default view emphasized the wrong side of the map.
+
+- `TerrainMesh.TERRAIN_WORLD: 9 → 11` (22% bigger physical extent in scene units). `TERRAIN_HEIGHT: 1.0 → 1.2` (proportional bump for terrain prominence).
+- `DesktopControls.center` default: `(0, 0, 0)` → `(-3.0, 0, 0.5)`. This lands almost exactly on the centroid of the populated cluster (Scripps Ranch / Poway / Mira Mesa). The east edge (Ramona at world x ≈ +0.7, Cedar Creek at +4.4) is still in frame at the new default distance.
+- `distance`: `14 → 16` (slightly wider initial framing for the bigger map).
+- `resetView()` mirrors the new defaults so R restores the same view.
+
+Trade-off acknowledged: Cedar Creek (east edge, gx=115 → world +4.4) is now ~7.4 units from the new center. At distance 16 with 55° FOV, half-frustum width ≈ 8.3 units, so Cedar Creek sits near the right edge of the view but is still visible. The fire IS visible at start; the marshal just sees more of the populated west by default. Pan with WASD or zoom out (now to distance 70) for full overview.
+
+**Verification.** `npm run build` clean, selftest 25/25, e2e 14/14.
+
+**No-conflict audit:**
+- Ember particles are read-only consumers of CA events; don't affect routing or other rendering.
+- Bigger TERRAIN_WORLD auto-scales every renderer that uses `gridToWorld` (terrain, roads, zones, routes, populations, shelters, contraflow, perimeter, compass, wind arrow, embers, fire overlay). Verified by inspection.
+- Camera shift only affects view, not coordinate system.
+- E2 cap at 25 active embers is hard-bounded; wouldn't degrade frame rate even on Santa Ana wind days.
+
+---
+
 ## 2026-05-08 — session 16 (Tier D continued: route fade + PTT readability)
 
 Continuing Tier D after session 15. D3 fade transitions, D5 voice transcription legibility. D6 (savepoints) and D1 (performance audit) still deferred — D6 because CA RNG is unseeded so true reproducibility needs a deeper refactor; D1 because it requires in-browser profiling not available here.

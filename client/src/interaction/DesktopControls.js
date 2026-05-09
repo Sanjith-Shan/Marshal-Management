@@ -9,12 +9,17 @@ export class DesktopControls {
     this.camera = camera;
     this.canvas = canvas;
     this.target = terrainGroup;
-    this.distance = 14;            // initial camera distance
+    this.distance = 16;            // initial camera distance (matches bigger TERRAIN_WORLD)
     this.MIN_DIST = 2.0;
     this.MAX_DIST = 70;
     this.azimuth = 0.6;            // rad
     this.elevation = 0.65;         // rad above horizon
-    this.center = new THREE.Vector3(0, 0, 0);
+    // Default focal point shifted west to the populated cluster centroid
+    // (Mira Mesa / Scripps Ranch / Poway). Lets the marshal see who's
+    // actually evacuating without zooming out — the dense west side is
+    // central, the sparser east edge (Cedar Creek ignition + Ramona) is
+    // still on-screen but offset.
+    this.center = new THREE.Vector3(-3.0, 0, 0.5);
     this.dragging = false;
     this.last = { x: 0, y: 0 };
     this._dragPixels = 0;
@@ -76,10 +81,10 @@ export class DesktopControls {
   }
 
   resetView() {
-    this.distance = 14;
+    this.distance = 16;
     this.azimuth = 0.6;
     this.elevation = 0.65;
-    this.center.set(0, 0, 0);
+    this.center.set(-3.0, 0, 0.5);
   }
 
   update(dt) {

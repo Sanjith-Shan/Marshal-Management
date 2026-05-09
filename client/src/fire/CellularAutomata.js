@@ -51,6 +51,10 @@ export class CellularAutomata {
     this.onUpdate = null;
     this._cellArrivalSent = 0;
     this._paused = false;
+    // Ember-spotting events recorded in _stepOnce when a wind-driven spot
+    // fire successfully ignites a remote cell. Drained each frame by
+    // EmberAnimator on the client to render a brief arc particle.
+    this._emberEvents = [];
 
     // Ignition
     const { gx, gy } = scenario.ignition;
@@ -83,6 +87,15 @@ export class CellularAutomata {
   setPaused(paused) {
     this._paused = !!paused;
     if (!this._paused) this.tickAccum = 0;
+  }
+
+  // Drain the ember-spotting event queue. Caller (EmberAnimator) consumes
+  // these once per frame to spawn arc particles.
+  consumeEmberEvents() {
+    if (this._emberEvents.length === 0) return null;
+    const events = this._emberEvents;
+    this._emberEvents = [];
+    return events;
   }
 
   step(dtSec) {
@@ -175,6 +188,11 @@ export class CellularAutomata {
           if (Math.random() < 0.5) {
             next[ti] = STATE_BURNING;
             if (arr[ti] === Infinity) arr[ti] = this.simMinutes + 0.5;
+            // Bound the queue so a long offline window doesn't accumulate
+            // hundreds of events; oldest dropped first.
+            if (this._emberEvents.length < 60) {
+              this._emberEvents.push({ from: { gx: sx, gy: sy }, to: { gx: tx, gy: ty } });
+            }
           }
         }
       }
