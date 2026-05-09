@@ -90,6 +90,7 @@ class App {
       this._applyEvacuationToScene(snap);
       if (this.fireCA && snap.weather) this.fireCA.setWind(snap.weather.windDeg, snap.weather.windKph);
       if (this.windInd && snap.weather) this.windInd.setWind(snap.weather.windDeg, snap.weather.windKph, snap.weather.redFlag);
+      if (snap.weather) this.hud.setWindStatus(snap.weather);
       if (snap.firms) this.hud.setFirms(snap.firms);
       if (snap.census) this.panels.setCensus(snap.census);
       if (snap.simRunning != null) {
@@ -151,6 +152,7 @@ class App {
       this.panels.updateWeather(w);
       if (this.fireCA) this.fireCA.setWind(w.windDeg, w.windKph);
       if (this.windInd) this.windInd.setWind(w.windDeg, w.windKph, w.redFlag);
+      this.hud.setWindStatus(w);
     });
 
     this.socket.on('mode', (m) => {
@@ -445,6 +447,7 @@ class App {
     if (this.contraflow) this.contraflow.update(dt);
     if (this.proactive) this.proactive.update(dt, this.scene.camera);
     if (this.windInd) this.windInd.update(dt);
+    if (this.panels?.panels?.weather) this.panels.panels.weather.setAzimuth(this.desktop.azimuth);
     this.scene.update(dt);
     this.scene.renderer.render(this.scene.scene, this.scene.camera);
   }

@@ -208,6 +208,17 @@ export class HUD {
     document.getElementById('btn-ptt').classList.toggle('active', active);
   }
 
+  setWindStatus(w) {
+    const el = document.getElementById('wind-status');
+    if (!el || !w) return;
+    const mph = Math.round(w.windKph * 0.621371);
+    const from = _cardinal(w.windDeg);
+    const toward = _windLabel(w.windDeg);
+    el.textContent = `${from}→${toward} ${mph} mph`;
+    el.title = `Wind from ${from} at ${mph} mph · fire moving ${toward}`;
+    el.style.color = w.redFlag ? 'var(--accent-hot)' : 'var(--accent)';
+  }
+
   setFire(f) {
     if (!f) return;
     if (!this.fireBadge) {
