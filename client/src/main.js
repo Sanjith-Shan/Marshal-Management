@@ -439,10 +439,24 @@ class App {
 
     if (mode === 'COMMAND') {
       // Click priority in COMMAND:
-      //   1. shelter diamond hit  → toggle compromised flag
+      //   0. Shift held → ALWAYS designate-shelter (overrides road/shelter
+      //      picks). Without this, a road under the cursor wins and the
+      //      user can't add shelters in road-dense areas.
+      //   1. shelter diamond hit  → toggle compromised
       //   2. road pick proxy hit  → block / unblock that edge
-      //   3. Shift held + nothing else hit → designate new shelter at the
-      //      nearest road node to the terrain click point
+      if (ev.shiftKey && this.terrain) {
+        const grid = this._terrainGridAtClick(x, y);
+        if (grid) {
+          this.socket.emit('action', {
+            type: 'designate-shelter',
+            payload: { gx: grid.gx, gy: grid.gy }
+          });
+          this.hud.showActionToast('New shelter designated', 'ok');
+        } else {
+          this.hud.showActionToast('Click on terrain (not above edge)', 'warn');
+        }
+        return;
+      }
       const shelterId = this.shelters?.pickShelter(this.scene.camera, x, y);
       if (shelterId !== null && shelterId !== undefined) {
         const sh = this.scenario.shelters.find(s => s.nodeId === shelterId);
@@ -466,16 +480,6 @@ class App {
             payload: { edgeId: hit, blocked: !edge?.blocked }
           });
           return;
-        }
-      }
-      if (ev.shiftKey && this.terrain) {
-        const grid = this._terrainGridAtClick(x, y);
-        if (grid) {
-          this.socket.emit('action', {
-            type: 'designate-shelter',
-            payload: { gx: grid.gx, gy: grid.gy }
-          });
-          this.hud.showActionToast('New shelter designated', 'ok');
         }
       }
     } else if (mode === 'EVACUATE' && this.zones) {

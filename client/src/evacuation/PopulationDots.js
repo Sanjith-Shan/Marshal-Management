@@ -5,7 +5,7 @@
 // path), so we BFS over the subgraph to recover an ordered polyline.
 
 import * as THREE from 'three';
-import { bfsPolyline } from './_polyline.js';
+import { bfsPolyline, orientPolyline } from './_polyline.js';
 
 const DOTS_PER_PERSON = 0.01;     // 100 people = 1 dot
 const MIN_DOTS_PER_NODE = 2;
@@ -111,16 +111,18 @@ export class PopulationDots {
     const dest = this.scenario.shelters.find(s => s.name === topDestName);
     if (!dest) return null;
 
-    return bfsPolyline(
+    const gridToWorld = (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h);
+    const pts = bfsPolyline(
       zone.route.edgeIds,
       startNode,
       dest.nodeId,
       this.scenario.edges,
       this.scenario.nodes,
-      (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
+      gridToWorld,
       FLOW_HEIGHT,
       3
     );
+    return orientPolyline(pts, startNode, this.scenario.nodes, gridToWorld);
   }
 
   _samplePolyline(poly, t) {

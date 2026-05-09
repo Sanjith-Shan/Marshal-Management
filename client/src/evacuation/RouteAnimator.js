@@ -7,7 +7,7 @@
 // a solid reference even when particles are too small to see.
 
 import * as THREE from 'three';
-import { chainPolyline, bfsPolyline } from './_polyline.js';
+import { chainPolyline, bfsPolyline, orientPolyline } from './_polyline.js';
 
 const PARTICLES_PER_ROUTE = 40;
 const SPEED = 0.25;
@@ -158,20 +158,20 @@ export class RouteAnimator {
   }
 
   _edgesToPolyline(edgeIds, startNodeId, endNodeId) {
+    const gridToWorld = (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h);
+    let pts = null;
     if (startNodeId != null && endNodeId != null) {
-      const pts = bfsPolyline(
-        edgeIds, startNodeId, endNodeId,
-        this.scenario.edges, this.scenario.nodes,
-        (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
-        0.04, 4
-      );
-      if (pts && pts.length >= 2) return pts;
+      pts = bfsPolyline(edgeIds, startNodeId, endNodeId,
+        this.scenario.edges, this.scenario.nodes, gridToWorld, 0.04, 4);
     }
-    return chainPolyline(
-      edgeIds, this.scenario.edges, this.scenario.nodes,
-      (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
-      0.04, 4
-    );
+    if (!pts || pts.length < 2) {
+      pts = chainPolyline(edgeIds, this.scenario.edges, this.scenario.nodes,
+        gridToWorld, 0.04, 4);
+    }
+    // Defensive: ensure polyline runs population → shelter (start → end).
+    // bfsPolyline should already orient correctly, but chainPolyline (the
+    // fallback) picks edges[0].u as head — could be the shelter side.
+    return orientPolyline(pts, startNodeId, this.scenario.nodes, gridToWorld);
   }
 
   update(dt) {

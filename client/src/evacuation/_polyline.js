@@ -114,3 +114,23 @@ function nodesToPolyline(nodeIds, allNodes, gridToWorld, hOffset, subdivide) {
   }
   return pts;
 }
+
+/**
+ * Defensive orientation fix. After building a polyline, verify its first
+ * point is closer to the desired startNode than its last; if not, the
+ * polyline came back reversed (e.g. chainPolyline picked the shelter end
+ * as edges[0].u). Reverse so callers can always animate phase 0 → 1 as
+ * "start → end".
+ */
+export function orientPolyline(pts, startNode, allNodes, gridToWorld) {
+  if (!pts || pts.length < 2 || startNode == null) return pts;
+  const node = allNodes[startNode];
+  if (!node) return pts;
+  const startWorld = gridToWorld(node.x, node.z, 0);
+  const dxF = pts[0].x - startWorld.x, dzF = pts[0].z - startWorld.z;
+  const dxL = pts[pts.length - 1].x - startWorld.x, dzL = pts[pts.length - 1].z - startWorld.z;
+  if ((dxL * dxL + dzL * dzL) < (dxF * dxF + dzF * dzF)) {
+    return pts.slice().reverse();
+  }
+  return pts;
+}

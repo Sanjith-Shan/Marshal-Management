@@ -73,7 +73,7 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
   await wait(800);
   assert(updates.evac.length > 0, 'evacuation broadcast received');
   const ev = updates.evac[updates.evac.length - 1];
-  assert(ev.zones && ev.zones.length === 3, 'evacuation has 3 zones');
+  assert(ev.zones && ev.zones.length === 6, 'evacuation has 6 zones');
   assert(ev.zones.every(z => 'route' in z), 'zones include route data');
 
   // Block a road

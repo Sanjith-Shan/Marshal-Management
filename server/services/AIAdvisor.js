@@ -48,9 +48,12 @@ export class AIAdvisor {
 
     // --- Zone level overrides ---
     const zoneTokens = [
-      { match: /\b(?:scripps\s*ranch|scripps|zone\s*a)\b/, name: 'Scripps Ranch' },
-      { match: /\b(?:poway|zone\s*b)\b/,                   name: 'Poway' },
-      { match: /\b(?:ramona|zone\s*c)\b/,                  name: 'Ramona' }
+      { match: /\b(?:scripps\s*ranch|scripps|zone\s*a)\b/,                 name: 'Scripps Ranch' },
+      { match: /\b(?:poway|zone\s*b)\b/,                                    name: 'Poway' },
+      { match: /\b(?:ramona|zone\s*c)\b/,                                   name: 'Ramona' },
+      { match: /\b(?:mira\s*mesa|zone\s*d)\b/,                              name: 'Mira Mesa' },
+      { match: /\b(?:rancho\s*pe(?:n|ñ)asquitos|penasquitos|zone\s*e)\b/,   name: 'Rancho Peñasquitos' },
+      { match: /\b(?:la\s*jolla|ucsd|zone\s*f)\b/,                          name: 'La Jolla / UCSD' }
     ];
     // Require an explicit level token to avoid false positives like
     // "how ready is Poway?" or "is the team set?". Order: GO → READY → SET.

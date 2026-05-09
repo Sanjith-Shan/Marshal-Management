@@ -419,9 +419,12 @@ function generatePopulations(nodes, rng) {
     return { cx: gx, cy: gy, total, name };
   };
   const targets = [
-    cluster(32.927, -117.084, 3200, 'Scripps Ranch'),   // SD neighborhood
-    cluster(32.963, -117.038, 2100, 'Poway'),           // City of Poway
-    cluster(33.041, -116.868, 4800, 'Ramona'),          // Ramona CDP
+    cluster(32.927, -117.084, 3200, 'Scripps Ranch'),       // SD neighborhood
+    cluster(32.963, -117.038, 2100, 'Poway'),               // City of Poway
+    cluster(33.041, -116.868, 4800, 'Ramona'),              // Ramona CDP
+    cluster(32.918, -117.131, 2800, 'Mira Mesa'),           // West-side residential
+    cluster(32.99,  -117.07,  2400, 'Rancho Peñasquitos'),  // North suburbs
+    cluster(32.85,  -117.27,  3600, 'La Jolla / UCSD'),     // Coastal west
   ];
   const populations = [];
   const used = new Set();
@@ -464,10 +467,11 @@ function pickShelters(nodes, populations) {
     // Qualcomm Stadium — the actual 2003 Cedar Fire mass-evacuation shelter
     // (housed ~10,000 evacuees). Demolished 2021; coords are the historical
     // location, used here for fidelity to the real event.
-    shelter(32.7831, -117.1196, 'Qualcomm Stadium', 8000),
-    shelter(32.918,  -117.132,  'Mira Mesa HS',     800),    // west, Scripps Ranch
-    shelter(32.969,  -117.011,  'Poway HS',         600),    // central, Poway
-    shelter(33.045,  -116.864,  'Ramona Senior HS', 800),    // east, Ramona
+    shelter(32.7831, -117.1196, 'Qualcomm Stadium',    8000),
+    shelter(32.918,  -117.132,  'Mira Mesa HS',         800),    // west, Scripps Ranch
+    shelter(32.969,  -117.011,  'Poway HS',             600),    // central, Poway
+    shelter(33.045,  -116.864,  'Ramona Senior HS',     800),    // east, Ramona
+    shelter(32.7745, -117.0823, 'SDSU Aztec Stadium',  2500),    // central south, distinct from any zone
   ];
   const populationNodeIds = new Set(populations.map(p => p.nodeId));
   return candidates.map(c => {

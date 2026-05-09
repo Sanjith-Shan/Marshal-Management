@@ -282,12 +282,53 @@ export class StateManager extends EventEmitter {
         this.broadcast('edge:update', { id: ce.id, blocked: true, contra: ce.contra });
       }
     } else {
-      // Surgical unblock — single edge only. Re-clicking any X marker in
-      // a previously-clustered block opens just that segment.
-      e.blocked = false;
-      this.broadcast('edge:update', { id: e.id, blocked: false, contra: e.contra });
+      // Symmetric unblock — extend through any connected blocked same-class
+      // edges so a single click on any X in a previously-clustered block
+      // clears the whole highway closure (matches user expectation: "I
+      // clicked the X; the X's should disappear").
+      const cluster = this._findUnblockCluster(edgeId);
+      for (const id of cluster) {
+        const ce = this.scenario.edges.find(x => x.id === id);
+        if (!ce || !ce.blocked) continue;
+        ce.blocked = false;
+        this.broadcast('edge:update', { id: ce.id, blocked: false, contra: ce.contra });
+      }
     }
     this.evacuation.lostRoads = this.scenario.edges.filter(e => e.blocked).length;
+  }
+
+  // BFS through currently-BLOCKED same-class neighbors. Used on unblock
+  // so a single click clears the whole connected blocked cluster, no cap
+  // (the cap was on block-extension; on unblock we want to fully clear
+  // whatever the user previously closed).
+  _findUnblockCluster(edgeId) {
+    const e = this.scenario.edges.find(x => x.id === edgeId);
+    if (!e) return [edgeId];
+    const blockedSameClass = this.scenario.edges
+      .filter(x => x.hwy === e.hwy && x.blocked);
+    const byNode = new Map();
+    for (const x of blockedSameClass) {
+      if (!byNode.has(x.u)) byNode.set(x.u, []);
+      if (!byNode.has(x.v)) byNode.set(x.v, []);
+      byNode.get(x.u).push(x.id);
+      byNode.get(x.v).push(x.id);
+    }
+    const cluster = new Set([edgeId]);
+    const queue = [edgeId];
+    while (queue.length) {
+      const cur = queue.shift();
+      const ce = this.scenario.edges.find(x => x.id === cur);
+      if (!ce) continue;
+      for (const nodeId of [ce.u, ce.v]) {
+        for (const aId of byNode.get(nodeId) || []) {
+          if (!cluster.has(aId)) {
+            cluster.add(aId);
+            queue.push(aId);
+          }
+        }
+      }
+    }
+    return [...cluster];
   }
 
   // BFS through edges of the same hwy class up to a class-specific cap.

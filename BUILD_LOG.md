@@ -5,6 +5,89 @@
 
 ---
 
+## 2026-05-09 — session 20 (plan: dot direction, cluster unblock, shelter visibility, more zones)
+
+### Problem report (continuing testing)
+
+After session 19 fixes, user finds:
+
+1. **X markers persist after each click cycle** — clicking X removes only that single edge, but the cluster-block from session 19 placed 4-6 X's; user expects clicking once to clear the whole cluster.
+2. **Dots flow OUT of Qualcomm Stadium toward populations** in EVACUATE mode — wrong direction. Should be population → shelter.
+3. **No visible compromised-shelter indicator** — the small grey diamond + thin red ring are too subtle. User can't see compromise state and doesn't know how to restore.
+4. **Shift+click on terrain doesn't actually add a shelter** — pickEdge wins on a road first; user sees nothing happen.
+5. **Only 3 population zones** — wants more, well-spaced from shelters. Wants at least one more shelter, distinct from any zone.
+6. **Smooth dot motion** — flow has to read clean.
+
+### Diagnosis
+
+**1. X cluster persistence**: session 19 added cluster-block (BFS through same-class adjacency) but kept unblock surgical. Asymmetric. Single click on X opens 1 of N. Symmetric fix: unblock also extends through connected currently-blocked same-class edges.
+
+**2. Dot flow direction**: `EvacuationEngine.runFullEvacuation` builds `z.route = { edgeIds, secondaryEdgeIds, destinations }` — does NOT include `startNodeId` / `endNodeId`. `RouteAnimator._edgesToPolyline(edgeIds, startNodeId, endNodeId)` falls through to `chainPolyline` since the args are undefined. `chainPolyline` is a greedy edge-chain walker — its head/tail orientation depends on the order edges appear in the input array, not on which node was the population vs the shelter. Sometimes the chain ends up oriented shelter → population, so particles riding `phase 0 → 1` flow OUT OF the shelter.
+
+`PopulationDots._buildPolyline` already passes explicit `startNode` (largest-pop node) and `dest.nodeId` (shelter) to `bfsPolyline`, which is direction-deterministic — so PopulationDots are already correct. The bug is RouteAnimator-only.
+
+**3. Compromised indicator**: `_applyCompromisedState` greys the diamond, dims the bar, shows a 0.085-radius ring with red. At desktop zoom ~18, that's a few pixels — invisible.
+
+**4. New shelter designation**: in COMMAND mode the click router checks shelter pick first, then road pick, then Shift+terrain. With 19k pickable major roads at the new bbox density, almost any click hits a road, so road-block fires and the Shift designation never runs.
+
+**5. More zones / shelter**: feature ask. Real San Diego has plenty of populated communities to add. Need to position a new shelter clearly outside any zone cluster.
+
+**6. Smooth flow**: solving #2 fixes most of the perceived non-smoothness (particles not zigzagging or jumping direction). Per-frame phase advancement is already smooth.
+
+### Plan
+
+**P0 — `EvacuationEngine.runFullEvacuation`**: emit `startNodeId` (longest-path subgroup's population node) and `endNodeId` (top-destination shelter node) on `z.route`. RouteAnimator already reads them when present. Same data is already on `topPaths[0]` (`startNodeId`, `destNode`).
+
+**P0 — `StateManager.blockRoad(edgeId, false)`**: when unblocking a major road that's part of a connected blocked cluster, extend through same-class adjacency to all currently-blocked neighbors. Use `_findBlockCluster` but filter to `blocked === true` only. Each affected edge emits its own `edge:update` so all X's clear in one click.
+
+**P1 — `ShelterMarker._applyCompromisedState`**: replace subtle ring with a much more visible compromised-state visual:
+- Big red X-bar mesh above the diamond (scaled up; matches the road-block X visual language)
+- Floating canvas label "COMPROMISED" near the diamond (color red)
+- Diamond itself: stronger desaturation, slightly smaller scale
+- All grouped so they show/hide atomically
+
+**P1 — Shelter designation priority** (`main.js _handleCanvasClick`): when `ev.shiftKey` is true in COMMAND mode, designate-shelter wins over road/shelter pick. Plus a HUD action toast on entering COMMAND mode that reminds: "Shift+click on terrain to add shelter".
+
+**P1 — Scenario data** (`ScenarioBuilder.generatePopulations` + `pickShelters`):
+- Add 3 zones: Mira Mesa (32.918, -117.131), Rancho Peñasquitos (32.99, -117.07), La Jolla / UCSD area (32.85, -117.27).
+- Add 1 shelter: SDSU Aztec Stadium (32.7745, -117.0823) — central, distinct from any zone cluster.
+- Total: 6 zones, 5 shelters at boot. Each zone has multiple shelter options for routing.
+
+### Execution
+
+1. Engine: route start/end node IDs (P0)
+2. Unblock-cluster (P0)
+3. Bigger compromised visual (P1)
+4. Shift-priority click (P1)
+5. Add zones + shelter (P1)
+6. Outcomes / gates / commit
+7. Update this entry
+
+### Outcomes
+
+**P0 — Symmetric unblock cluster.** `StateManager._findUnblockCluster(edgeId)` BFS through ONLY currently-blocked same-class neighbors (no cap). `blockRoad(edgeId, false)` now uses it: re-clicking any X marker clears the entire blocked cluster in one click. Each affected edge emits its own `edge:update` so the X markers vanish atomically client-side. Asymmetry in session 19 (block extends, unblock surgical) is gone.
+
+**P0 — Polyline orientation.** New `orientPolyline(pts, startNode, allNodes, gridToWorld)` helper in `client/src/evacuation/_polyline.js` reverses the polyline if its tail is closer to the population start node than its head. Wired into `RouteAnimator._edgesToPolyline` and `PopulationDots._buildPolyline` as a defensive call after `bfsPolyline` / `chainPolyline`. Fixes the "dots flow OUT of Qualcomm Stadium" bug — chainPolyline could pick `edges[0].u` as head, which was the shelter side. Now particles always ride population → shelter regardless of edge order.
+
+**P1 — Bigger compromised-shelter visual** (`ShelterMarker.js`). Replaced subtle radius-0.085 ring with: two crossed `BoxGeometry(0.22, 0.018, 0.04)` bars rotated ±π/4 above the diamond (bright red `0xff3030`) + a floating "COMPROMISED" canvas-texture sprite. Diamond itself gets stronger desaturation (`emissive 0x300000`, opacity 0.55) and a slightly larger pickable target (radius 0.06 → 0.07). `_applyCompromisedState(rec, bool)` toggles xMat opacity and label opacity atomically.
+
+**P1 — Shift+click priority** (`main.js _handleCanvasClick` COMMAND branch). New priority order: (0) `ev.shiftKey` + terrain hit → `designate-shelter` (returns immediately, overrides road/shelter picks). (1) Shelter diamond → `compromise-shelter` toggle. (2) Road pick proxy → `block-road`. Fallback toast ("Click on terrain (not above edge)") if Shift held but `_terrainGridAtClick` returns null.
+
+**P1 — 3 new zones + 1 new shelter** (`ScenarioBuilder.js`):
+- Zones: Mira Mesa (32.918, −117.131, pop 2800), Rancho Peñasquitos (32.99, −117.07, pop 2400), La Jolla / UCSD (32.85, −117.27, pop 3600).
+- Shelter: SDSU Aztec Stadium (32.7745, −117.0823, capacity 2500). Centrally located, not on top of any zone.
+- Total at boot: **6 zones / 5 shelters / 18,900 people**. Reachability check passes: all population nodes reach a shelter via the road graph.
+- `AIAdvisor.parseIntents` zone tokens extended to recognize the 3 new zones (with Zone D/E/F aliases as well as proper names like "Mira Mesa", "Rancho Peñasquitos / Penasquitos", "La Jolla", "UCSD").
+
+**Verification.** `npm run build` clean (62 modules, 647 kB → 171 kB gz). `node server/_selftest.js` 25/25 (assertions bumped: ≥4 shelters, 6 zones returned). `MM_FORCE_MOCK=1 node server/_e2e.js` 14/14 (zone count bumped to 6).
+
+**Risks remaining.**
+- New zones / shelter create more route options. With Mira Mesa HS sitting next to the new Mira Mesa zone, `pickShelters` falls back to the nearest non-population node which may be 1-2 grid cells off; routes still route correctly.
+- `orientPolyline` only checks endpoint distances. If a route's polyline doubles back on itself (rare with `bfsPolyline`, possible with `chainPolyline` fallback when edges aren't a single path), orientation may flip mid-stream. Acceptable; flagged for future-me.
+- 6 zones × parseIntents zone tokens means ambiguous prompts ("upgrade to GO" with no zone name) still no-op as intended — only explicit `<zone token>` + `<level token>` triggers.
+
+---
+
 ## 2026-05-09 — session 19 (plan: fire stop bug + block-road dots + shelter management)
 
 ### Problem report
