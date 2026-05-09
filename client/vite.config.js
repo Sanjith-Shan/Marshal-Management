@@ -5,20 +5,21 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// HTTPS is required for WebXR `immersive-ar` even on LAN. The basic-ssl
-// plugin generates a self-signed cert at startup so the Quest 3 browser
-// can hit https://<lan-ip>:5173. Quest will show a cert warning on first
-// connect — tap "Advanced → Proceed" once.
+// HTTPS is opt-in via the HTTPS=1 env var (set by `npm run dev:quest`).
+// Default `npm run dev` runs over plain HTTP so the desktop browser
+// doesn't have to click through a self-signed cert warning.
+// HTTPS is required only for WebXR `immersive-ar` over LAN — turn it on
+// when you want to load the page on a Quest 3.
+const useHttps = process.env.HTTPS === '1';
+
 export default defineConfig({
   root: __dirname,
   publicDir: path.resolve(__dirname, 'public'),
-  plugins: [basicSsl()],
+  plugins: useHttps ? [basicSsl()] : [],
   server: {
     host: '0.0.0.0',
     port: 5173,
-    https: true,
-    // Allow connections from any LAN host (Quest comes in as the device IP).
-    // Vite 5 disables host header validation when host: '0.0.0.0' but be explicit.
+    https: useHttps,
     cors: true,
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },

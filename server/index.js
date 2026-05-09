@@ -409,8 +409,10 @@ httpServer.listen(PORT, async () => {
   // LAN IPs for Quest 3 / mobile testing. WebXR `immersive-ar` requires
   // HTTPS even over LAN — use the Vite dev server (which serves HTTPS via
   // @vitejs/plugin-basic-ssl), not the bare server URL.
+  // Only print the LAN-IP banner when the dev server is in HTTPS mode
+  // (`npm run dev:quest`). Otherwise it's a desktop-only session.
   const lanIps = listLanIps();
-  if (lanIps.length) {
+  if (process.env.HTTPS === '1' && lanIps.length) {
     console.log(`\n     For Quest 3 (same Wi-Fi):`);
     for (const { name, address } of lanIps) {
       console.log(`       https://${address}:5173    (${name})`);

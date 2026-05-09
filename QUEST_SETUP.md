@@ -23,12 +23,20 @@ npm install
 
 ## Running
 
+For day-to-day desktop development, use plain `npm run dev` — that runs
+the dev server over plain HTTP so the Mac browser doesn't have to click
+through any cert warning.
+
+When you want to test on a Quest, opt in to HTTPS:
+
 ```bash
-npm run dev
+npm run dev:quest
 ```
 
-The server prints both your `localhost` URL and your **LAN IPs** on
-startup — copy one into the Quest browser. Output looks like:
+This sets `HTTPS=1`, the Vite dev server generates a self-signed cert
+on startup, and the server prints both your `localhost` URL and your
+**LAN IPs** in the banner — copy one into the Quest browser. Output
+looks like:
 
 ```
   ▲  Marshal Management server
