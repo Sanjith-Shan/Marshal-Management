@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-05-08 — session 18 (Tier B1: Quest 3 LAN testing setup)
+
+User asked to test on Quest 3. WebXR `immersive-ar` requires HTTPS even over LAN, so the dev server needs a cert. Setting up the simplest path: Vite-managed self-signed cert + LAN IP printer at startup.
+
+**Plugin install.** `@vitejs/plugin-basic-ssl@^1.2.0` (v1 — v2+ requires Vite 6, we have Vite 5).
+
+**Vite config** (`client/vite.config.js`):
+- Imports `basicSsl` and adds it to `plugins`.
+- `server.https: true` — Vite generates a per-startup self-signed cert.
+- `proxy` blocks now include `changeOrigin: true` so the upstream HTTP server (port 3000) sees the right Host header when the Vite frontend is HTTPS.
+- Quest browser hits `https://<lan-ip>:5173`; Vite proxies `/api` and `/socket.io` to `http://localhost:3000` server-side. Browser sees only HTTPS.
+
+**Server LAN IP banner** (`server/index.js`):
+- New `listLanIps()` walks `os.networkInterfaces()`, returns IPv4 non-internal interfaces (en0 / en1 / etc.).
+- Startup banner prints each LAN IP with the HTTPS Vite URL: `https://<ip>:5173    (en0)`.
+- Tested: prints correctly when bound to all interfaces.
+
+**`QUEST_SETUP.md`**:
+- Step-by-step: prereqs, run, on-Quest steps, what works, known caveats, troubleshooting.
+- Documents the cert-warning click-through (Quest persists per-host).
+- Lists known AR caveats: no plane detection, DOM panels may not render in passthrough, no hand tracking, terrain at fixed offset.
+- Cloudflared tunnel mentioned as alternative if Quest can't reach LAN.
+
+**README** — added one line pointing to `QUEST_SETUP.md` under Quick start.
+
+**Verification.** Server boots cleanly with the new banner. `npm run build` clean, selftest 25/25, e2e 14/14. The actual `Enter AR` path on Quest 3 is **untested** — this is the first session that enables the prerequisites for testing. The user is the one who'll test on hardware next.
+
+**Tier B status**: B1 ✅ done (HTTPS infrastructure ready). B2 (validate immersive-ar on real Quest), B3 (3D AR panels), B4 (RATK plane detection), B5 (hand tracking) all still pending — they need actual on-headset feedback to plan.
+
+---
+
 ## 2026-05-08 — session 17 (E2 ember particles + map expansion + west-focus camera)
 
 User asked for the visible ember-spotting visualization (E2) to be minimal and not distracting, plus a bigger / west-focused map since population is concentrated west of the current geographic center.

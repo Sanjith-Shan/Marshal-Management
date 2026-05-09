@@ -4,6 +4,7 @@ import { Server as SocketIO } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 import { StateManager } from './services/StateManager.js';
@@ -22,6 +23,17 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+
+function listLanIps() {
+  const ifaces = os.networkInterfaces();
+  const out = [];
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) out.push({ name, address: iface.address });
+    }
+  }
+  return out;
+}
 
 const app = express();
 app.use(cors());
@@ -399,7 +411,18 @@ httpServer.listen(PORT, async () => {
   console.log(`\n  ▲  Marshal Management server`);
   console.log(`     http://localhost:${PORT}`);
   console.log(`     Vite dev:  http://localhost:5173`);
-  console.log(`     AI backend: ${ai.backendName()}`);
+  // LAN IPs for Quest 3 / mobile testing. WebXR `immersive-ar` requires
+  // HTTPS even over LAN — use the Vite dev server (which serves HTTPS via
+  // @vitejs/plugin-basic-ssl), not the bare server URL.
+  const lanIps = listLanIps();
+  if (lanIps.length) {
+    console.log(`\n     For Quest 3 (same Wi-Fi):`);
+    for (const { name, address } of lanIps) {
+      console.log(`       https://${address}:5173    (${name})`);
+    }
+    console.log(`     Tap "Advanced → Proceed" on the cert warning, then "Enter AR".`);
+  }
+  console.log(`\n     AI backend: ${ai.backendName()}`);
   console.log(`     Arduino: ${arduino.connected ? 'connected' : 'keyboard fallback'}\n`);
 
   // Pre-compute an initial baseline evacuation so routes are visible before

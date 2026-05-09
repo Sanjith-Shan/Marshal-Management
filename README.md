@@ -13,6 +13,7 @@ npm run dev
 
 - **Server:** http://localhost:3000 (Socket.IO + REST)
 - **Client (desktop):** http://localhost:5173
+- **Client (Quest 3 over LAN):** the server prints `https://<your-lan-ip>:5173` at startup. See [`QUEST_SETUP.md`](./QUEST_SETUP.md).
 
 Open the client URL in any modern browser. Click **Enter AR** in a Quest 3 browser to switch to immersive passthrough mode.
 
