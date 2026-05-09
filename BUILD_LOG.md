@@ -104,7 +104,7 @@ Every renderer exposes `applySnapshot(snap)`, optional `update(dt)`, and `setEva
 
 1. **Desktop** (default, primary): `npm run dev` → http://localhost:5173. Mouse + keyboard, DOM panels.
 2. **Quest 3 / WebXR AR**: `HTTPS=1 npm run dev` → https://<lan-ip>:5173. Same scene, terrain anchored at fixed offset (0, 1.0, -0.7) scale 0.35; no plane detection yet.
-3. **Hardware board**: UNO Q over WiFi (production target, untested live). Keyboard always works as fallback.
+3. **Hardware board**: UNO Q on phone hotspot, with a **host-side socat forwarder** to bridge the App Lab Docker container's network namespace (2026-05-09). Container is on Docker bridge `172.20.0.0/16` which overlaps the iPhone hotspot subnet `172.20.10.0/28`, so the container can't reach the Mac directly — kernel routes 172.20.10.8 to the local bridge instead of wlan0. Workaround: `socat TCP4-LISTEN:3000,fork,reuseaddr TCP4:<MAC_IP>:3000` runs on the UNO Q host; container connects to bridge gateway `172.20.0.1:3000` instead. `python/main.py` SERVER_URL = `http://172.20.0.1:3000`. ADB-reverse was tried first but the UNO Q's adbd doesn't honor reverse-forward — `[Errno 111] Connection refused` on device-side loopback. **Auto-start**: `/home/arduino/socat-marshal.sh` (waits for wlan0 to get a 172.20.10.x IP, then launches socat) runs at every boot via user crontab `@reboot`. Hardcodes MAC_IP=172.20.10.8 — edit script if Mac gets a different hotspot IP. Demo: hotspot ON (Maximize Compatibility) → Mac joins → `npm run dev` → plug UNO Q USB-C → App Lab Run. Keyboard always works as fallback.
 
 ---
 

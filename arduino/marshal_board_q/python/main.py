@@ -11,8 +11,12 @@ point at the laptop running `npm run dev` on the same WiFi network.
 """
 
 import os
+import socket as _socket
+import subprocess
 import time
 import threading
+from urllib.request import urlopen
+from urllib.error import URLError
 
 import socketio
 from arduino.app_utils import App, Bridge
@@ -20,9 +24,15 @@ from arduino.app_utils import App, Bridge
 
 # ---------- configuration ----------
 
-# Pre-demo: change this to your laptop's LAN IP and port.
-# Example: "http://192.168.1.50:3000"
-DEFAULT_SERVER_URL = "http://192.168.1.50:3000"
+# App Lab runs this Python in a Docker container whose bridge subnet
+# (172.20.0.0/16) overlaps with the iPhone hotspot subnet (172.20.10.0/28),
+# so the container can't reach the Mac directly — traffic to 172.20.10.8 is
+# captured by the bridge route and dropped. Workaround: a `socat` forwarder
+# runs on the UNO Q host listening on its bridge gateway 172.20.0.1:3000 and
+# proxies to the Mac's 172.20.10.8:3000. The container connects to the
+# gateway (always reachable) and the host hops it onto WiFi.
+# Start the forwarder with: adb shell 'nohup socat TCP4-LISTEN:3000,fork,reuseaddr TCP4:172.20.10.8:3000 </dev/null >/tmp/socat.log 2>&1 &'
+DEFAULT_SERVER_URL = "http://172.20.0.1:3000"
 SERVER_URL = os.environ.get("SERVER_URL", DEFAULT_SERVER_URL)
 
 
@@ -65,13 +75,57 @@ def connect_error(data):
     print(f"[sio] connect error: {data}")
 
 
+def _dump_net_state():
+    """Print board-side network state so we can see if the board is on the
+    expected WiFi at the expected IP."""
+    for cmd in (["hostname", "-I"], ["ip", "-4", "-br", "addr"], ["ip", "route", "show", "default"]):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=2).stdout.strip()
+            print(f"[net] $ {' '.join(cmd)}: {out}")
+        except Exception as e:
+            print(f"[net] $ {' '.join(cmd)} failed: {e}")
+    try:
+        ssid = subprocess.run(["iwgetid", "-r"], capture_output=True, text=True, timeout=2).stdout.strip()
+        print(f"[net] SSID: {ssid or '(none)'}")
+    except Exception:
+        pass
+
+
+def _probe_server():
+    """Diagnose where the connection fails: TCP layer or HTTP/Socket.IO layer."""
+    _dump_net_state()
+    from urllib.parse import urlparse
+    u = urlparse(SERVER_URL)
+    host, port = u.hostname or "127.0.0.1", u.port or 3000
+    try:
+        with _socket.create_connection((host, port), timeout=3):
+            print(f"[probe] TCP {host}:{port} OK")
+    except OSError as e:
+        print(f"[probe] TCP {host}:{port} FAILED: {e}")
+        return False
+    try:
+        with urlopen(f"{SERVER_URL}/socket.io/?EIO=4&transport=polling", timeout=3) as r:
+            body = r.read(120).decode(errors="replace")
+            print(f"[probe] HTTP socket.io handshake OK: {body[:60]}…")
+    except URLError as e:
+        print(f"[probe] HTTP socket.io FAILED: {e}")
+        return False
+    return True
+
+
 def _connect_loop():
     """Background reconnect — retries forever so a power-cycled laptop
     doesn't permanently disable the board."""
+    probed_ok = False
     while True:
         if not sio.connected:
+            if not probed_ok:
+                probed_ok = _probe_server()
             try:
-                sio.connect(SERVER_URL, transports=["websocket"])
+                # Default transports = polling+websocket. Lets Socket.IO negotiate
+                # the upgrade rather than forcing websocket-only (which can fail
+                # silently if the adb tunnel mishandles the WS upgrade frame).
+                sio.connect(SERVER_URL)
             except Exception as e:
                 print(f"[sio] connect failed: {e}")
         time.sleep(2)
