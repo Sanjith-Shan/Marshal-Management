@@ -1,5 +1,5 @@
 // HUD — owns the top-bar status, mode label, sim clock, EVACUATE button
-// state, push-to-talk toast, help overlay, timeline scrubber.
+// state, help overlay, timeline scrubber.
 
 export class HUD {
   constructor(socket, panels) {
@@ -9,7 +9,6 @@ export class HUD {
     this.connLabel = document.getElementById('conn-label');
     this.modeLabel = document.getElementById('mode-label');
     this.timeLabel = document.getElementById('time-label');
-    this.pttToast = document.getElementById('ptt-toast');
     this.timeline = document.getElementById('timeline');
     this.timelineSlider = document.getElementById('timeline-slider');
     this.timelineValue = document.getElementById('timeline-value');
@@ -139,7 +138,7 @@ export class HUD {
   showModeToast(mode) {
     const descriptions = {
       MONITOR:  'Monitor Mode — observation only',
-      COMMAND:  'Command Mode — click roads to block · voice commands active',
+      COMMAND:  'Command Mode — click roads to block',
       EVACUATE: 'Evacuation Mode — routing panel open · press E to recompute'
     };
     const colors = {
@@ -185,9 +184,7 @@ export class HUD {
   }
 
   cycleMode() {
-    const cur = this.modeLabel.textContent;
-    const next = cur === 'MONITOR' ? 'COMMAND' : cur === 'COMMAND' ? 'EVACUATE' : 'MONITOR';
-    this.socket.emit('action', { type: 'mode', payload: next });
+    this.socket.emit('action', { type: 'mode-cycle' });
   }
 
   setSimTime(min) {
@@ -212,11 +209,6 @@ export class HUD {
     if (m) {
       this._scenarioStartTotalMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     }
-  }
-
-  setPTT(active) {
-    this.pttToast.classList.toggle('hidden', !active);
-    document.getElementById('btn-ptt').classList.toggle('active', active);
   }
 
   setWindStatus(w) {
@@ -296,16 +288,15 @@ export class HUD {
 
 function _evacuationHint(ev, weather) {
   const noRoute = ev.zones.find(z => !z.route && z.level >= 2);
-  if (noRoute) return `⚡ ${noRoute.name} has no route — press M → COMMAND, unblock roads or voice: "Contraflow I-15"`;
+  if (noRoute) return `⚡ ${noRoute.name} has no route — press M → COMMAND and unblock roads`;
 
   const overload = ev.zones.find(z => z.bottleneck && z.bottleneck.ratio > 100);
   if (overload) {
-    const worstZone = ev.zones.slice().sort((a, b) => (b.bottleneck?.ratio || 0) - (a.bottleneck?.ratio || 0))[0];
-    return `Route overloaded in ${overload.name} — voice: "Contraflow I-15" or click zone to cycle level`;
+    return `Route overloaded in ${overload.name} — click zone to cycle level or block alternate roads in COMMAND`;
   }
 
   const critical = ev.zones.find(z => z.level < 3 && z.marginMin < 15 && z.marginMin >= 0);
-  if (critical) return `⚡ ${critical.name} margin ${critical.marginMin}m — click zone or voice: "Upgrade ${critical.name} to GO"`;
+  if (critical) return `⚡ ${critical.name} margin ${critical.marginMin}m — click the zone to upgrade to GO`;
 
   const windLabel = weather ? _windLabel(weather.windDeg) : '';
   const windCardinal = weather ? ` (${_cardinal(weather.windDeg)} → ${_windLabel(weather.windDeg)})` : '';

@@ -36,6 +36,48 @@ User asked to test on Quest 3. WebXR `immersive-ar` requires HTTPS even over LAN
 
 ---
 
+## 2026-05-09 — session 19 (UNO Q hardware migration + PTT removal + mode-cycle action)
+
+**Goal:** wire the user's physical UNO Q + breadboard (joystick + 6 buttons) into the system so they can drive the AR view + commands without touching the laptop. User confirmed two architectural decisions before code: WiFi/Python transport (not USB serial), and full removal of PTT/voice-input (laptop-only voice would have been the alternative).
+
+**Research findings that drove the implementation** (sources cited in agent transcripts; selected gotchas):
+
+- UNO Q's USB-C is bridged to the MPU/Linux side. `Serial.println()` from a sketch goes to D0/D1 hardware pins, not to the App Lab console. Use `Monitor.println()` from `<Arduino_RouterBridge.h>` instead. This is the single most likely cause of "I uploaded my sketch and see nothing" mid-demo — flagged in the new sketch's header comment.
+- UNO Q GPIO is 3.3 V; analog pins are NOT 5 V tolerant. Joystick must be wired to the 3V3 rail, not 5V. Documented in `arduino/marshal_board_q/README.md` and the sketch header.
+- App Lab projects have a fixed layout: `app.yaml`, `sketch/{sketch.ino,sketch.yaml}`, `python/{main.py,requirements.txt}`. Single-file `.ino` won't load. The MCU FQBN is `arduino:zephyr:unoq`.
+- WiFi/BT live on the **MPU** side, not the MCU. There is no first-party `WiFi.h` for sending Socket.IO from the sketch on the Zephyr core. Documented architecture is sketch → `Bridge.notify(...)` → Python on Linux side → Socket.IO client to the Node server. `python-socketio>=5.11` speaks Socket.IO protocol v5 which the server's `socket.io@4.8.1` accepts. App Lab installs `python/requirements.txt` into a per-app venv on first run.
+
+**Implementation:**
+
+- **`arduino/marshal_board_q/`** (new) — UNO Q App Lab project. Six files: `app.yaml`, `sketch/sketch.ino`, `sketch/sketch.yaml`, `python/main.py`, `python/requirements.txt`, `README.md`. Sketch reads INPUT_PULLUP buttons on D2–D8 with 20 ms debounce and joystick on A0/A1 with deadzone 60 + 33 ms emit throttle, calling `Bridge.notify("button", "<name>")` and `Bridge.notify("joystick", dx, dy)`. Python registers handlers via `Bridge.provide(...)`, opens an auto-reconnecting Socket.IO client to `SERVER_URL` (env var or default), and emits `{type, payload}` actions on the `'action'` channel. The classic-UNO sketch in `arduino/marshal_board/` is intentionally untouched per CLAUDE.md.
+- **`mode-cycle` action** (new) — server now accepts `{type: 'mode-cycle'}` in addition to absolute `{type: 'mode', payload: ...}`. The cycle order MONITOR → COMMAND → EVACUATE → MONITOR lives in a new `StateManager.cycleMode()` method. HUD's mode button (`btn-mode`), keyboard `M`, and the hardware mode button all funnel through this single action — three-way parity preserved (CLAUDE.md convention).
+- **PTT / push-to-talk fully removed.** `client/src/interaction/VoiceInput.js` deleted. Touchpoints cleaned: `Keybindings.js` (Space binding + voice ctor param), `main.js` (VoiceInput import + instantiation + ptt socket handler), `HUD.js` (`setPTT` method, ptt toast ref, mode-toast voice mention), `index.html` (`btn-ptt`, `ptt-toast` block, "Voice commands" help section, evac-banner-hint), `styles.css` (ptt-toast + ctl-ptt + ptt-pulse rules), `EvacuationPanel.js` (4 zone-action voice hints replaced with click/COMMAND-mode equivalents), `server/index.js` (case 'ptt' + case 'ai:transcribe'), `StateManager.js` (`this.ptt`, `setPTT`, `ptt` in snapshot), `ArduinoService.js` (legacy field-3 emit; field still parsed but ignored for backward compat with the existing classic-UNO firmware). Voice OUTPUT (SpeechSynthesis in `AIAdvisorPanel`) is independent and intentionally retained — it reads advisor replies aloud and doesn't depend on the input pipeline.
+- **`AIAdvisor.parseIntents()` retained.** The intent parser (block / upgrade / contraflow) still lives in the server and runs against any text submitted to `/api/ai/ask` or `socket.emit('ai:ask', ...)`. With voice input gone there's no client UI invoking it today, but the surface area is real and useful for typed input or future hardware text entry.
+
+**Action mapping (the parity rule in one table):**
+
+| Hardware (D-pin) | Sketch event | Python action emit | Server handler |
+|---|---|---|---|
+| D2 (joy click) | `Bridge.notify("button","joy_click")` | `{type:'joystick:reset'}` | `state.broadcast('joystick:reset', {})` |
+| D3 Weather    | `Bridge.notify("button","weather")` | `{type:'panel',payload:'weather'}` | `state.togglePanel('weather')` |
+| D4 Evac       | `Bridge.notify("button","evac")` | `{type:'panel',payload:'evacuation'}` | `state.togglePanel('evacuation')` |
+| D5 AI         | `Bridge.notify("button","ai")` | `{type:'panel',payload:'advisor'}` | `state.togglePanel('advisor')` |
+| D6 Video      | `Bridge.notify("button","video")` | `{type:'panel',payload:'video'}` | `state.togglePanel('video')` |
+| D7 Mode       | `Bridge.notify("button","mode")` | `{type:'mode-cycle'}` | `state.cycleMode()` |
+| D8 Reset      | `Bridge.notify("button","reset")` | `{type:'reset'}` | `state.resetScenario(...)` |
+| A0/A1 Joystick | `Bridge.notify("joystick", dx, dy)` | `{type:'joystick',payload:{dx,dy}}` | `state.broadcast('joystick', payload)` |
+
+**Verification:** selftest 25/25, e2e 14/14, `npm run build` clean (transformed 62 modules; 642 kB → 169 kB gz). Python `main.py` parses cleanly with `ast.parse`. Physical UNO Q test still pending — depends on the user installing App Lab and pointing `SERVER_URL` at the laptop's LAN IP. Detailed setup steps in `arduino/marshal_board_q/README.md`.
+
+**Open follow-ups (not done in this session):**
+
+- **Python-side `Bridge.provide` symbol** is not on docs.arduino.cc — it's reported in forum threads and bundled examples. If the call raises `AttributeError` on the user's specific App Lab image, fall back to whatever symbol `dir(Bridge)` exposes. README documents the SSH-side enumerate command.
+- **mDNS / discovery** for SERVER_URL is hand-edited today. Adding `zeroconf` would give "drop the board on the network and it finds the server" UX.
+- **Hold-to-±60 on time-jump** — the user's spec dropped time-jump from the hardware entirely. Keyboard `[` / `]` (Shift = ±60) and HUD «« / »» buttons retain it.
+- **CLAUDE.md folder-structure section** doesn't yet mention `arduino/marshal_board_q/`. Worth a one-line addition next session — keeping it minimal here since this BUILD_LOG entry is the primary record.
+
+---
+
 ## 2026-05-08 — session 17 (E2 ember particles + map expansion + west-focus camera)
 
 User asked for the visible ember-spotting visualization (E2) to be minimal and not distracting, plus a bigger / west-focused map since population is concentrated west of the current geographic center.

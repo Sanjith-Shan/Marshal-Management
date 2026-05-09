@@ -1,0 +1,7 @@
+name: Marshal Management Board
+description: "Hardware command board for Marshal Management — joystick + 6 buttons. MCU sketch reads GPIO and forwards events via Bridge to Python, which emits Socket.IO actions to the Marshal Management Node server."
+icon: 🚒
+version: "1.0.0"
+
+ports: []
+bricks: []

@@ -20,7 +20,6 @@ import { PerimeterOverlay } from './evacuation/PerimeterOverlay.js';
 import { CompassMarkers } from './ar/CompassMarkers.js';
 import { WindIndicator } from './ar/WindIndicator.js';
 import { PanelManager } from './panels/PanelManager.js';
-import { VoiceInput } from './interaction/VoiceInput.js';
 import { Keybindings } from './interaction/Keybindings.js';
 import { HUD } from './ui/HUD.js';
 
@@ -60,9 +59,8 @@ class App {
     this._currentMode = 'MONITOR';
 
     this.panels = new PanelManager(this.socket);
-    this.voice = new VoiceInput(this.socket);
     this.hud = new HUD(this.socket, this.panels);
-    this.keys = new Keybindings(this.socket, this.hud, this.voice, this.panels);
+    this.keys = new Keybindings(this.socket, this.hud, this.panels);
     this.desktop = new DesktopControls(this.scene.camera, this.canvas, this.scene.terrainGroup);
     this.ar = new ARSession(this.scene, this.canvas);
 
@@ -200,8 +198,6 @@ class App {
         }
       }
     });
-
-    this.socket.on('ptt', (active) => this.hud.setPTT(active));
 
     this.socket.on('joystick', ({ dx, dy }) => {
       if (this.desktop) this.desktop.pulseRotate(dx, dy);

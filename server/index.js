@@ -257,6 +257,9 @@ async function handleAction(msg, socket) {
     case 'mode':
       state.setMode(payload);
       break;
+    case 'mode-cycle':
+      state.cycleMode();
+      break;
     case 'panel':
       state.togglePanel(payload);
       break;
@@ -356,14 +359,6 @@ async function handleAction(msg, socket) {
       break;
     case 'joystick:reset':
       state.broadcast('joystick:reset', {});
-      break;
-    case 'ptt':
-      state.setPTT(payload.active);
-      break;
-    case 'ai:transcribe':
-      // Alias for ai:ask sent from future voice-pipeline code. Prompt comes in
-      // as payload.transcript; funnel through the same intent parser.
-      if (payload?.transcript) await processAdvisorPrompt(payload.transcript);
       break;
     default:
       console.warn(`[action] unknown type "${type}"`);

@@ -47,7 +47,6 @@ export class StateManager extends EventEmitter {
     };
     this.advisorMessages = [];
     this.aiProactiveEnabled = true;
-    this.ptt = false;
     this.timelineMin = 0;
     this.firms = { available: false, count: 0, hotspots: [] };
     this.census = { available: false, populations: {} };
@@ -113,7 +112,6 @@ export class StateManager extends EventEmitter {
         totalPopulation: this.evacuation.totalPopulation
       },
       advisorMessages: this.advisorMessages.slice(-20),
-      ptt: this.ptt,
       timelineMin: this.timelineMin,
       firms: this.firms,
       census: this.census,
@@ -241,6 +239,12 @@ export class StateManager extends EventEmitter {
     this.broadcast('snapshot', this.snapshot());
   }
 
+  cycleMode() {
+    const order = ['MONITOR', 'COMMAND', 'EVACUATE'];
+    const next = order[(order.indexOf(this.mode) + 1) % order.length];
+    this.setMode(next);
+  }
+
   toggleSim(running) {
     this.simRunning = running == null ? !this.simRunning : !!running;
     this.broadcast('sim', { running: this.simRunning });
@@ -290,11 +294,6 @@ export class StateManager extends EventEmitter {
   setTimeline(min) {
     this.timelineMin = Math.max(0, Math.min(180, min));
     this.broadcast('timeline', this.timelineMin);
-  }
-
-  setPTT(active) {
-    this.ptt = !!active;
-    this.broadcast('ptt', this.ptt);
   }
 
   updateWeather(w) {

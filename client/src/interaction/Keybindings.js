@@ -6,22 +6,18 @@
 //   E      EVACUATE
 //   M      cycle mode (MONITOR / COMMAND / EVACUATE)
 //   R      reset scenario
-//   Space  push-to-talk (hold)
 //   T      toggle timeline scrubber
 //   ]      jump sim time +30 min   (Shift+] = +60 min)
 //   [      jump sim time -30 min   (Shift+[ = -60 min)
 //   ?      help overlay
 
 export class Keybindings {
-  constructor(socket, hud, voice, panels) {
+  constructor(socket, hud, panels) {
     this.socket = socket;
     this.hud = hud;
-    this.voice = voice;
     this.panels = panels;
-    this._pttHeld = false;
 
     window.addEventListener('keydown', (e) => this._down(e));
-    window.addEventListener('keyup', (e) => this._up(e));
   }
 
   _isInputFocused() {
@@ -31,7 +27,7 @@ export class Keybindings {
 
   _down(e) {
     if (this._isInputFocused()) return;
-    if (e.repeat && e.code !== 'Space') return;
+    if (e.repeat) return;
     switch (e.code) {
       case 'Digit1':
         this.socket.emit('action', { type: 'panel', payload: 'weather' }); break;
@@ -44,7 +40,7 @@ export class Keybindings {
       case 'KeyE':
         this.socket.emit('action', { type: 'evacuate' }); break;
       case 'KeyM':
-        this.hud.cycleMode(); break;
+        this.socket.emit('action', { type: 'mode-cycle' }); break;
       case 'KeyR':
         if (e.shiftKey) this.socket.emit('action', { type: 'reset' });
         else this.socket.emit('action', { type: 'reset' });
@@ -72,29 +68,9 @@ export class Keybindings {
           payload: { deltaMin: e.shiftKey ? -60 : -30 }
         });
         break;
-      case 'Space':
-        if (!this._pttHeld) {
-          this._pttHeld = true;
-          this.socket.emit('action', { type: 'ptt', payload: { active: true } });
-          this.hud.setPTT(true);
-          this.voice.start();
-        }
-        e.preventDefault();
-        break;
       case 'Slash':
         if (e.shiftKey) this.hud.showHelp(true);
         break;
-    }
-  }
-
-  _up(e) {
-    if (e.code === 'Space') {
-      if (this._pttHeld) {
-        this._pttHeld = false;
-        this.socket.emit('action', { type: 'ptt', payload: { active: false } });
-        this.hud.setPTT(false);
-        this.voice.stop();
-      }
     }
   }
 }

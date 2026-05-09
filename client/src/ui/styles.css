@@ -173,7 +173,6 @@ html, body, #app {
 }
 .ctl-evacuate:hover { background: linear-gradient(135deg, #d83838, #ff5555); }
 .ctl-evacuate.armed { animation: armed 0.6s ease-in-out infinite alternate; }
-.ctl-ptt.active { background: rgba(255, 95, 95, 0.25); border-color: var(--accent-hot); color: var(--accent-hot); }
 .ctl-mode { color: var(--accent-warm); }
 .ctl-reset { color: var(--text-dim); }
 .ctl-time { color: var(--accent); letter-spacing: 0.04em; }
@@ -560,42 +559,6 @@ kbd {
   opacity: 0;
   transform: translateX(-50%) translateY(-6px);
   pointer-events: none;
-}
-
-#ptt-toast {
-  position: absolute;
-  top: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
-}
-#ptt-toast.hidden { display: none; }
-.ptt-toast-inner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(255, 95, 95, 0.16);
-  border: 1px solid var(--accent-hot);
-  backdrop-filter: blur(14px);
-  border-radius: 10px;
-  padding: 10px 18px;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  color: #ffd9d9;
-  max-width: 70vw;
-  word-break: break-word;
-  line-height: 1.4;
-}
-#ptt-text {
-  font-weight: 500;
-}
-.ptt-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-hot);
-  box-shadow: 0 0 12px var(--accent-hot);
-  animation: pulse 0.8s infinite;
 }
 
 #timeline {

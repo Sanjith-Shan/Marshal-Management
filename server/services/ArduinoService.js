@@ -57,9 +57,12 @@ export class ArduinoService extends EventEmitter {
   _onLine(line) {
     const parts = line.trim().split(',').map(Number);
     if (parts.length < 12 || parts.some(Number.isNaN)) return;
-    // Fields 13/14 (tBack, tFwd) added with TODO group H1; older firmware
-    // sending 12 fields still works — the destructuring leaves them undefined.
-    const [jx, jy, ptt, wx, evac, ai, vid, evacuate, mA, mB, reset, jClick, tBack, tFwd] = parts;
+    // Field 3 in legacy classic-UNO firmware was push-to-talk; PTT was
+    // removed from the system (2026-05-09) so this slot is intentionally
+    // parsed and ignored. Fields 13/14 (tBack, tFwd) added with TODO group H1;
+    // older firmware sending 12 fields still works — the destructuring leaves
+    // them undefined.
+    const [jx, jy, /* legacy ptt, unused */ , wx, evac, ai, vid, evacuate, mA, mB, reset, jClick, tBack, tFwd] = parts;
 
     // Joystick deadzone → analog pan/rotate
     if (Math.abs(jx - 512) > 60 || Math.abs(jy - 512) > 60) {
@@ -70,7 +73,6 @@ export class ArduinoService extends EventEmitter {
     }
 
     // Edge-triggered buttons
-    this._edge('ptt', ptt, () => this.emit('event', { type: 'ptt', payload: { active: ptt === 1 } }), { both: true });
     this._edge('wx', wx, () => this.emit('event', { type: 'panel', payload: 'weather' }));
     this._edge('evac', evac, () => this.emit('event', { type: 'panel', payload: 'evacuation' }));
     this._edge('ai', ai, () => this.emit('event', { type: 'panel', payload: 'advisor' }));

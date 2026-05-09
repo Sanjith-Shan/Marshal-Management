@@ -1,0 +1,12 @@
+default_fqbn: arduino:zephyr:unoq
+default_programmer: ""
+default_port: ""
+default_protocol: ""
+
+profiles:
+  unoq:
+    fqbn: arduino:zephyr:unoq
+    libraries:
+      - Arduino_RouterBridge
+
+default_profile: unoq

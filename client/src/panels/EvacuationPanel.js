@@ -94,7 +94,7 @@ export class EvacuationPanel extends Panel {
         ? z.route.destinations.slice(0, 2).map(d => `${d.name} (${d.count})`).join(', ')
         : null;
       const bn = z.bottleneck
-        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — voice: "Contraflow ${this._roads.motorway || 'primary route'}"</div>`
+        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — switch to COMMAND and enable contraflow on ${this._roads.motorway || 'primary route'}</div>`
         : '';
       const hint = zoneActionHint(z, this._roads);
       const segCount = z.route?.edgeIds?.length || 0;
@@ -153,17 +153,17 @@ function zoneActionHint(z, roads = {}) {
   const hwy = roads.motorway || roads.trunk || 'primary route';
 
   if (!z.route) {
-    if (z.level >= 2) return s('crit', `⚡ NO ROUTE — press M → COMMAND, unblock roads or voice: "Contraflow ${hwy}"`);
+    if (z.level >= 2) return s('crit', `⚡ NO ROUTE — press M → COMMAND and unblock roads / enable contraflow on ${hwy}`);
     return s('warn', '⚠ No route computed — press E to run evacuation engine');
   }
   if (z.marginMin < 0) {
     return s('crit', '⚡ Fire arrival imminent — maximize contraflow, push remaining evacuees now');
   }
   if (z.marginMin < 15 && z.level < 3) {
-    return s('crit', `⚡ Margin critical — click zone or voice: "Upgrade ${z.name} to GO"`);
+    return s('crit', `⚡ Margin critical — click the zone to upgrade to GO`);
   }
   if (z.bottleneck && z.bottleneck.ratio > 100) {
-    return s('warn', `→ Route overloaded — voice: "Contraflow ${hwy}" or "Block alternate roads"`);
+    return s('warn', `→ Route overloaded — enable contraflow on ${hwy} (COMMAND) or block alternates`);
   }
   if (z.level < 3 && z.marginMin < 45) {
     return s('warn', `→ Margin tightening — consider upgrading to LEVEL ${z.level + 1}`);

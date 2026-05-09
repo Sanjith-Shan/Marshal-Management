@@ -49,7 +49,6 @@
             <span class="ctl-sep"></span>
             <button class="ctl ctl-mode" id="btn-mode"><kbd>M</kbd> Mode</button>
             <button class="ctl ctl-evacuate" id="btn-evacuate"><kbd>E</kbd> EVACUATE</button>
-            <button class="ctl ctl-ptt" id="btn-ptt"><kbd>Space</kbd> Hold to Talk</button>
             <button class="ctl ctl-time" id="btn-time-back" title="Rewind 30 min (Shift = 60)"><kbd>[</kbd> −30m</button>
             <button class="ctl ctl-time" id="btn-time-fwd" title="Advance 30 min (Shift = 60)"><kbd>]</kbd> +30m</button>
             <button class="ctl ctl-pause" id="btn-pause" title="Pause / resume simulation"><kbd>P</kbd> Pause</button>
@@ -71,7 +70,7 @@
             </div>
             <div class="help-mode-row cmd">
               <span class="help-mode-tag">COMMAND</span>
-              <span>Cross-hair cursor; hover roads to highlight; <b>click to block / unblock</b>. Voice commands active.</span>
+              <span>Cross-hair cursor; hover roads to highlight; <b>click to block / unblock</b>.</span>
             </div>
             <div class="help-mode-row evac">
               <span class="help-mode-tag">EVACUATE</span>
@@ -81,7 +80,6 @@
             <h3 class="help-section">Essentials</h3>
             <div class="help-grid">
               <div><kbd>E</kbd></div><div>Run evacuation engine</div>
-              <div><kbd>Space</kbd> (hold)</div><div>Push-to-talk to AI advisor</div>
               <div><kbd>1</kbd>–<kbd>4</kbd></div><div>Toggle Weather / Evac / AI / Video panels</div>
               <div><kbd>P</kbd></div><div>Pause / resume simulation</div>
               <div><kbd>F</kbd></div><div>Toggle real 2003 Cedar Fire footprint (NIFC)</div>
@@ -93,15 +91,6 @@
               <div>Mouse drag / <kbd>WASD</kbd></div><div>Rotate &amp; pan terrain</div>
               <div>Wheel / <kbd>Q</kbd> / <kbd>Z</kbd></div><div>Zoom in / out (range 2–70)</div>
               <div><kbd>]</kbd> / <kbd>[</kbd></div><div>Jump sim time ±30 min (Shift = ±60)</div>
-            </div>
-
-            <h3 class="help-section">Voice commands (hold Space then speak)</h3>
-            <div class="help-voice">
-              <div>"What's the biggest risk right now?"</div>
-              <div>"Upgrade Poway to GO" — escalates a zone</div>
-              <div>"Block I-15" / "Reopen I-15" — closes/opens a road class</div>
-              <div>"Enable contraflow on SR-67" — doubles outbound capacity</div>
-              <div>"Trigger evacuation for Zone A" — A=Scripps Ranch, B=Poway, C=Ramona</div>
             </div>
 
             <h3 class="help-section">What's real</h3>
@@ -117,14 +106,7 @@
           <div class="evac-banner-inner">
             <div class="evac-banner-title">EVACUATION ACTIVE</div>
             <div class="evac-banner-stats" id="evac-banner-stats">—</div>
-            <div class="evac-banner-hint" id="evac-banner-hint">Click a zone polygon to cycle its level · voice: "Block I-15", "Upgrade Poway to GO"</div>
-          </div>
-        </div>
-
-        <div id="ptt-toast" class="hidden">
-          <div class="ptt-toast-inner">
-            <span class="ptt-pulse"></span>
-            <span id="ptt-text">Listening…</span>
+            <div class="evac-banner-hint" id="evac-banner-hint">Click a zone polygon to cycle its level · switch to COMMAND (M) to block roads</div>
           </div>
         </div>
 
