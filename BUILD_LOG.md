@@ -3,6 +3,32 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 11
+
+**Real USGS terrain + route reroute legibility.**
+
+**1. USGS 3DEP terrain (`server/services/TerrainService.js`).** New service samples USGS Elevation Point Query Service (EPQS) at 33×33 = 1089 points across `BBOX`, fetches in parallel with bounded concurrency (40 threads, ~25 s cold), bilinear-resamples to 128×128, normalizes 0..1, caches to `data/cedar-corridor-dem.json`. Real San Diego elevation: **7 m at Mission Valley to 1259 m at Cleveland NF peaks**. `ScenarioBuilder.build({ realHeightmap })` accepts the result; falls back to procedural simplex noise on failure (DEM_DISABLED=1 or fetch error). Bootstrap uses `Promise.all` to load OSM + DEM concurrently. Subsequent boots load from cache in ~1 ms.
+
+   Caveat: the existing CA slope factor is tuned to procedural-noise gradient magnitudes; real DEM gradients distribute differently (mostly flat, occasionally steep). Fire spread now reflects actual terrain ridges/valleys. The slope multiplier (`* 50` in `CellularAutomata._stepOnce`) is unchanged — empirically correct for the demo's visual fidelity.
+
+   **EPQS gotcha**: the API returns `value` as a string (`"366.199645996"`), not a number. Initial implementation rejected all responses — fixed via `parseFloat`.
+
+**2. Scenario carries `realTerrain` / `realRoads` flags.** Surfaced via `publicScenario` so the client knows which sources are live.
+
+**3. HUD real-data badge (`client/src/ui/HUD.js`).** New `setRealDataBadge(scn)` adds a status-bar chip showing `🌐 OSM+3DEP` when both real sources are loaded. Visible at a glance — confirms the demo isn't running on procedural fallback.
+
+**4. Route reroute legibility (`server/index.js`).** `block-road` action now snapshots each zone's route before the block, runs evac, and calls `announceRouteDiffs(before, after, payload)`. For any zone whose Jaccard overlap with the prior route is < 0.6, a system advisor message describes the change: "Poway rerouted to Qualcomm Stadium. Evac 78m (+7m vs prior)." Critical case: route lost entirely → "Poway has NO viable route after that block. Unblock or open contraflow."
+
+**5. EvacuationPanel route segment count.** Each zone row now shows `→ Qualcomm Stadium (1500) · 18 seg (+10 alt)` so the marshal can see route density and alternate-edge availability at a glance.
+
+**Verification.** Gates green — selftest 25/25, e2e 14/14, build clean (~610 kB). Live USGS DEM fetch confirmed: 1089/1089 valid samples, 7-1259m range. Cached OSM + DEM warm-start under 50 ms.
+
+**Real-data progress:** weather (NWS), AI (OpenAI), wildfire hotspots (FIRMS), population (Census), road network (OSM), **terrain elevation (USGS 3DEP)**, scenario coordinates (real lat/lng) — all live. Still procedural: fuel grid (LANDFIRE FBFM40 download), Cedar Fire perimeter overlay (NIFC GeoJSON).
+
+**Still open:** AR/Quest 3 path, hardware UNO physical e2e, real fuel grid, real fire perimeter overlay.
+
+---
+
 ## 2026-05-08 — session 10
 
 **Real San Diego geography + OSM real roads + route invariant.** Now genuinely mimicking 2003 Cedar Fire on actual San Diego County data, not procedural noise.

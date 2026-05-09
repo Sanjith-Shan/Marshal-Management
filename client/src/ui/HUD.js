@@ -235,6 +235,21 @@ export class HUD {
     }
   }
 
+  setRealDataBadge(scn) {
+    if (!scn) return;
+    if (!this.realBadge) {
+      this.realBadge = document.createElement('span');
+      this.realBadge.id = 'real-data-badge';
+      this.realBadge.title = 'Real-world data sources active for this scenario';
+      this.realBadge.style.cssText = 'margin-left:8px;color:var(--accent-good);font-size:11px;letter-spacing:0.06em;';
+      document.getElementById('status-bar').appendChild(this.realBadge);
+    }
+    const parts = [];
+    if (scn.realRoads)   parts.push('OSM');
+    if (scn.realTerrain) parts.push('3DEP');
+    this.realBadge.textContent = parts.length ? `· 🌐 ${parts.join('+')}` : '';
+  }
+
   applySnapshot(snap) {
     if (!snap) return;
     this.setMode(snap.mode || 'MONITOR');

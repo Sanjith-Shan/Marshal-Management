@@ -44,8 +44,24 @@ Wire the Arduino as documented in `arduino/marshal_board/marshal_board.ino` and 
 | **Space** (hold) | Push-to-talk to AI advisor |
 | **T** | Toggle timeline scrubber |
 | **[** / **]** | Time-jump ±30 min (Shift = ±60) |
+| **P** | Pause / resume simulation |
 | **?** | Show help overlay |
 | Click road in Command mode | Toggle blocked |
+| Click zone in Evacuate mode | Cycle level (READY → SET → GO) |
+
+### Real-data sources (live, when keys / connectivity allow)
+
+| Layer | Source | Status |
+|---|---|---|
+| AI advisor | OpenAI gpt-4o-mini | live with `OPENAI_API_KEY` |
+| Weather | NWS api.weather.gov (KSAN) | live, no key |
+| Wildfire hotspots | NASA FIRMS VIIRS_SNPP_NRT | live with `FIRMS_MAP_KEY` |
+| Population | US Census ACS 2022 | live with `CENSUS_API_KEY` |
+| Road network | OpenStreetMap via Overpass | live, cached to `data/osm-cedar.json` |
+| Terrain elevation | USGS 3DEP via EPQS | live, cached to `data/cedar-corridor-dem.json` |
+| Scenario coords | Real lat/lng (Cedar 2003 ignition: 33.0356°N, −116.7°W) | embedded |
+
+Status badges in the HUD's top-bar (`🌐 OSM+3DEP`, `🛰 N CA hotspots`) confirm which sources are loaded for the current session.
 
 ### Mode behavior
 

@@ -14,6 +14,7 @@ import { ArduinoService } from './services/ArduinoService.js';
 import { FIRMSService } from './services/FIRMSService.js';
 import { CensusService } from './services/CensusService.js';
 import { loadOSMRoadNetwork } from './services/OSMService.js';
+import { loadTerrainHeightmap } from './services/TerrainService.js';
 import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
@@ -35,17 +36,21 @@ const io = new SocketIO(httpServer, {
 
 // --------------------- bootstrap ---------------------
 
-// Try to load real OSM road network for the Cedar Corridor; fall back to
-// procedural if unavailable. This kicks off async; we wait for it before
-// constructing the scenario so the road graph is real on first paint.
+// Real-data fan-out: kick off OSM road fetch + USGS DEM in parallel.
+// Both have on-disk caches, so warm starts are instant. Both fall back
+// to procedural on failure.
 let osmNetwork = null;
+let realHeightmap = null;
 try {
-  osmNetwork = await loadOSMRoadNetwork();
+  [osmNetwork, realHeightmap] = await Promise.all([
+    loadOSMRoadNetwork().catch(err => { console.warn('[osm] load threw:', err.message); return null; }),
+    loadTerrainHeightmap().catch(err => { console.warn('[dem] load threw:', err.message); return null; }),
+  ]);
 } catch (err) {
-  console.warn('[osm] load threw:', err.message);
+  console.warn('[bootstrap] real-data load failed:', err.message);
 }
 
-const scenario = ScenarioBuilder.build({ seed: 42, roadNetwork: osmNetwork });
+const scenario = ScenarioBuilder.build({ seed: 42, roadNetwork: osmNetwork, realHeightmap });
 const state = new StateManager(scenario);
 const evac = new EvacuationEngine(state);
 const weather = new WeatherService();
@@ -140,6 +145,52 @@ io.on('connection', (socket) => {
   });
 });
 
+// --------------------- route reroute diffing ---------------------
+
+// After a manual block, compare each zone's route to its prior state and
+// surface a system-source advisor message for any zone whose path changed
+// significantly. Helps the marshal see *why* a block matters.
+function announceRouteDiffs(beforeZones, afterZones, payload) {
+  for (const after of afterZones) {
+    const old = beforeZones.find(b => b.name === after.name);
+    if (!old) continue;
+    const newEdges = after.route?.edgeIds ? new Set(after.route.edgeIds) : null;
+    if (!old.edgeIds && !newEdges) continue;
+
+    if (!old.edgeIds && newEdges) {
+      state.pushAdvisorMessage({
+        severity: 'info', source: 'system', zoneName: after.name,
+        text: `${after.name} now has a route (${newEdges.size} segments → ${after.route.destinations[0]?.name || 'shelter'}, ${after.evacMin}m).`
+      });
+      continue;
+    }
+    if (old.edgeIds && !newEdges) {
+      state.pushAdvisorMessage({
+        severity: 'crit', source: 'system', zoneName: after.name,
+        text: `${after.name} has NO viable route after that block. Unblock or open contraflow.`
+      });
+      continue;
+    }
+    // Both routes exist — compare via Jaccard overlap.
+    let intersect = 0;
+    for (const e of newEdges) if (old.edgeIds.has(e)) intersect++;
+    const union = old.edgeIds.size + newEdges.size - intersect;
+    const overlap = union > 0 ? intersect / union : 1;
+    if (overlap < 0.6) {
+      const evacDelta = (after.evacMin || 0) - (old.evacMin || 0);
+      const destChanged = old.destName !== (after.route.destinations[0]?.name || null);
+      const dest = after.route.destinations[0]?.name || 'shelter';
+      const sign = evacDelta >= 0 ? '+' : '';
+      state.pushAdvisorMessage({
+        severity: evacDelta > 10 ? 'warn' : 'info',
+        source: 'system',
+        zoneName: after.name,
+        text: `${after.name} rerouted to ${dest}${destChanged ? ' (new shelter)' : ''}. Evac ${after.evacMin}m (${sign}${evacDelta}m vs prior).`
+      });
+    }
+  }
+}
+
 // --------------------- advisor prompt pipeline ---------------------
 
 // Parses imperative intents out of the prompt, dispatches them through the
@@ -173,6 +224,7 @@ async function handleAction(msg, socket) {
         seed: state.scenario.seed,
         scenarioId: nextId,
         roadNetwork: osmNetwork,    // reuse cached OSM if loaded
+        realHeightmap,              // reuse cached DEM if loaded
       }));
       break;
     }
@@ -182,10 +234,20 @@ async function handleAction(msg, socket) {
     case 'panel':
       state.togglePanel(payload);
       break;
-    case 'block-road':
+    case 'block-road': {
+      // Snapshot routes before blocking so we can announce significant
+      // reroutes after the engine re-runs.
+      const before = state.evacuation.zones.map(z => ({
+        name: z.name,
+        edgeIds: z.route?.edgeIds ? new Set(z.route.edgeIds) : null,
+        evacMin: z.evacMin,
+        destName: z.route?.destinations?.[0]?.name || null,
+      }));
       state.blockRoad(payload.edgeId, payload.blocked);
       await evac.runFullEvacuation();
+      announceRouteDiffs(before, state.evacuation.zones, payload);
       break;
+    }
     case 'designate-shelter':
       state.designateShelter(payload);
       await evac.runFullEvacuation();

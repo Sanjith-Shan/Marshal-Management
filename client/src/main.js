@@ -75,6 +75,7 @@ class App {
       this._buildWorld();
       if (scn.scenarioId) this.hud.setScenario(scn.scenarioId);
       this.hud.setScenarioStart(scn.scenarioMeta);
+      this.hud.setRealDataBadge(scn);
       this.panels.setScenarioContext(scn);
     });
 

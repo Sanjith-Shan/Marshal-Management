@@ -32,6 +32,9 @@ server/                    Node + Express + Socket.IO backend
     AIAdvisor.js           OpenAI gpt-4o-mini w/ full context; rules-based mock fallback
     WeatherService.js      NWS api.weather.gov polling (no key) + mock fallback
     FIRMSService.js        NASA FIRMS live California wildfire hotspots (key-gated)
+    CensusService.js       US Census ACS 2022 community populations (key-gated)
+    OSMService.js          Real San Diego road network via Overpass API; cached JSON
+    TerrainService.js      Real USGS 3DEP elevation via EPQS; cached JSON
     ArduinoService.js      USB-serial reader (optional, soft-imported)
     rng.js                 Mulberry32 seedable PRNG
   _selftest.js             Hidden scenario + evac + AI smoke test
@@ -57,9 +60,11 @@ node server/_e2e.js        # full socket round-trip on :3001
 Optional env (`.env`, see `.env.example`):
 - `OPENAI_API_KEY` — switches AIAdvisor from mock to live OpenAI gpt-4o-mini
 - `FIRMS_MAP_KEY` — enables NASA FIRMS live hotspot feed (HUD badge + AI context)
-- `CENSUS_API_KEY` — reserved for the real-data swap-in path (population by tract)
+- `CENSUS_API_KEY` — enables real ACS 2022 community populations
 - `DISABLE_ARDUINO=1` — skip serial autodetect entirely
-- `MM_FORCE_MOCK=1` — force AI/FIRMS to mock fallback even if keys are set; used by `_e2e.js`
+- `OSM_DISABLED=1` — skip Overpass road fetch (use procedural roads)
+- `DEM_DISABLED=1` — skip USGS DEM fetch (use procedural heightmap)
+- `MM_FORCE_MOCK=1` — force AI/FIRMS/Census/OSM/DEM to mock fallback regardless of keys; used by `_e2e.js`
 - `PORT` — server port (default 3000)
 
 Arduino: the existing `arduino/marshal_board/marshal_board.ino` targets **classic UNO + Arduino IDE + USB serial** and is the working reference. The **production target is Arduino UNO Q** (wireless, battery-powered, Arduino App Lab) — see `BUILD_LOG.md` TODO group H for the planned migration. Don't delete the classic-UNO sketch; the new wireless path will mirror its action protocol.

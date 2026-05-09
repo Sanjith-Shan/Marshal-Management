@@ -99,11 +99,12 @@ export const SCENARIOS = {
 export const DEFAULT_SCENARIO_ID = 'cedar';
 
 export const ScenarioBuilder = {
-  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID, roadNetwork = null } = {}) {
+  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID, roadNetwork = null, realHeightmap = null } = {}) {
     const rng = mulberry32(seed);
     const preset = SCENARIOS[scenarioId] ?? SCENARIOS[DEFAULT_SCENARIO_ID];
 
-    const heightmap = generateHeightmap(rng);
+    // Heightmap: real USGS 3DEP data if provided, else procedural noise.
+    const heightmap = realHeightmap || generateHeightmap(rng);
     const fuelGrid = generateFuelGrid(heightmap, rng);
     // Road network: external (real OSM) if provided, else procedural fallback.
     const { nodes, edges, highways } = roadNetwork || generateRoadNetwork(rng);
@@ -132,6 +133,8 @@ export const ScenarioBuilder = {
       scenarioId: preset.id,
       scenarioName: preset.name,
       scenarioMeta: preset.meta || null,
+      realTerrain: !!realHeightmap,
+      realRoads: !!roadNetwork,
       name: 'Cedar Corridor — San Diego County',
       gridSize: GRID,
       worldMeters: WORLD_M,

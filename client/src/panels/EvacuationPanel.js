@@ -93,8 +93,13 @@ export class EvacuationPanel extends Panel {
         ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — voice: "Contraflow ${this._roads.motorway || 'primary route'}"</div>`
         : '';
       const hint = zoneActionHint(z, this._roads);
+      const segCount = z.route?.edgeIds?.length || 0;
+      const altCount = z.route?.secondaryEdgeIds?.length || 0;
+      const segInfo = segCount
+        ? `<span style="color:var(--text-dim);font-size:10px">· ${segCount} seg${altCount ? ` (+${altCount} alt)` : ''}</span>`
+        : '';
       const destLine = dests
-        ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests}</div>`
+        ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests} ${segInfo}</div>`
         : `<div class="zone-meta" style="color:var(--accent-hot)">⚠ No route found</div>`;
       return `<div class="zone-row l${z.level}">
         <div class="zone-name">
