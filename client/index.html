@@ -50,6 +50,7 @@
             <button class="ctl ctl-ptt" id="btn-ptt"><kbd>Space</kbd> Hold to Talk</button>
             <button class="ctl ctl-time" id="btn-time-back" title="Rewind 30 min (Shift = 60)"><kbd>[</kbd> −30m</button>
             <button class="ctl ctl-time" id="btn-time-fwd" title="Advance 30 min (Shift = 60)"><kbd>]</kbd> +30m</button>
+            <button class="ctl ctl-pause" id="btn-pause" title="Pause / resume simulation"><kbd>P</kbd> Pause</button>
             <select class="ctl ctl-scenario" id="scenario-picker" title="Choose a demo scenario"></select>
             <button class="ctl ctl-reset" id="btn-reset"><kbd>R</kbd> Reset</button>
           </div>
@@ -73,6 +74,14 @@
               <div>Click road</div><div>(Command mode) toggle blocked</div>
             </div>
             <button class="help-close" id="help-close">Close</button>
+          </div>
+        </div>
+
+        <div id="evac-banner" class="hidden">
+          <div class="evac-banner-inner">
+            <div class="evac-banner-title">EVACUATION ACTIVE</div>
+            <div class="evac-banner-stats" id="evac-banner-stats">—</div>
+            <div class="evac-banner-hint">Click a zone polygon to cycle its level · voice: "Block I-15", "Upgrade Poway to GO"</div>
           </div>
         </div>
 

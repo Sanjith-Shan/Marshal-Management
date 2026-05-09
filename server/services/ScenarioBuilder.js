@@ -22,11 +22,58 @@ const FUEL = {
 
 // Named demo scenarios. All share seed 42 (same Cedar Corridor map) but
 // differ in ignition point — gives 3 distinctly-shaped fires for replay.
-// Display name is shown in the HUD picker.
+// Display name is shown in the HUD picker. `meta` carries real-world
+// historical facts so the AI advisor and UI can reference them.
 export const SCENARIOS = {
-  cedar:    { id: 'cedar',    name: 'Cedar Fire (2003)',          ignition: { gx: 80,  gy: 65  } },
-  witch:    { id: 'witch',    name: 'Witch Creek (2007 — East)',  ignition: { gx: 115, gy: 100 } },
-  plumas:   { id: 'plumas',   name: 'Plumas Approach (West)',     ignition: { gx: 45,  gy: 65  } },
+  cedar: {
+    id: 'cedar',
+    name: 'Cedar Fire (2003)',
+    ignition: { gx: 80, gy: 65 },
+    meta: {
+      realDate: '2003-10-25',
+      realIgnitionLatLng: { lat: 33.0356, lng: -116.7 },     // Cedar Creek, Cleveland NF
+      ignitionTime: '17:37 PDT',
+      cause: 'Lost hunter signal flare',
+      acresBurned: 273246,
+      fatalities: 15,
+      homesDestroyed: 2820,
+      evacuated: 70000,
+      durationDays: 10,
+      windDuringEvent: 'Santa Ana, NE 40–60 mph gusts',
+      communities: ['Scripps Ranch', 'Cuyamaca', 'Lakeside', 'Crest', 'Wildcat Canyon'],
+      summary: 'Largest wildfire in California history at the time. Sparked east of Ramona; driven west by Santa Ana winds into San Diego suburbs overnight Oct 25–26.'
+    }
+  },
+  witch: {
+    id: 'witch',
+    name: 'Witch Creek (2007)',
+    ignition: { gx: 115, gy: 100 },
+    meta: {
+      realDate: '2007-10-21',
+      realIgnitionLatLng: { lat: 33.0833, lng: -116.7167 },
+      ignitionTime: '12:35 PDT',
+      cause: 'Power line arc',
+      acresBurned: 197990,
+      fatalities: 2,
+      homesDestroyed: 1650,
+      evacuated: 500000,
+      durationDays: 8,
+      windDuringEvent: 'Santa Ana, E 40–80 mph gusts',
+      communities: ['Ramona', 'Rancho Bernardo', 'Poway', 'Escondido'],
+      summary: 'Triggered by Santa Ana winds knocking down SDG&E power lines near Witch Creek Road. Fastest-moving fire in 2007 firestorm; forced largest peacetime evacuation in California history.'
+    }
+  },
+  plumas: {
+    id: 'plumas',
+    name: 'Plumas Approach (Western)',
+    ignition: { gx: 45, gy: 65 },
+    meta: {
+      realDate: 'fictional',
+      acresBurned: null,
+      fatalities: null,
+      summary: 'Synthetic worst-case: ignition west of urban core, threatening Poway and Ramona simultaneously. Used to stress-test the routing engine when fire moves through populated arterial corridors.'
+    }
+  },
 };
 export const DEFAULT_SCENARIO_ID = 'cedar';
 
@@ -54,6 +101,7 @@ export const ScenarioBuilder = {
       seed,
       scenarioId: preset.id,
       scenarioName: preset.name,
+      scenarioMeta: preset.meta || null,
       name: 'Cedar Corridor — San Diego County',
       gridSize: GRID,
       worldMeters: WORLD_M,

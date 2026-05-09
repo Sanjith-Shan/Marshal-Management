@@ -14,6 +14,7 @@ export class HUD {
     this.timelineSlider = document.getElementById('timeline-slider');
     this.timelineValue = document.getElementById('timeline-value');
     this._simTimeMin = 0;      // tracked so slider can compute time-jump delta
+    this._scenarioStartTotalMin = 17 * 60 + 37;  // default Cedar 2003 ignition (17:37)
 
     document.getElementById('btn-help').addEventListener('click', () => this.showHelp(true));
     document.getElementById('help-close').addEventListener('click', () => this.showHelp(false));
@@ -36,6 +37,9 @@ export class HUD {
         payload: { deltaMin: e.shiftKey ? -60 : -30 }
       });
     });
+    document.getElementById('btn-pause').addEventListener('click', () => {
+      this.socket.emit('action', { type: 'sim:toggle' });
+    });
 
     this.timelineSlider.addEventListener('input', () => {
       const target = parseInt(this.timelineSlider.value, 10);
@@ -47,6 +51,7 @@ export class HUD {
     });
 
     this.fireBadge = null;
+    this.firmsBadge = null;
     this._modeToastTimer = null;
     this._modeToast = this._buildModeToast();
 
@@ -88,6 +93,35 @@ export class HUD {
     return el;
   }
 
+  setEvacBannerVisible(visible) {
+    const el = document.getElementById('evac-banner');
+    if (!el) return;
+    el.classList.toggle('hidden', !visible);
+  }
+
+  updateEvacBanner(snap) {
+    const el = document.getElementById('evac-banner-stats');
+    if (!el) return;
+    const ev = snap?.evacuation;
+    if (!ev?.zones) return;
+    const total = ev.totalPopulation || 0;
+    const evacuated = Math.round(ev.zones.reduce((a, z) => {
+      const zonePop = (snap.populations || []).filter(p => p.zone === z.name).reduce((s, p) => s + p.count, 0);
+      return a + ((z.evacuatedPct || 0) / 100) * zonePop;
+    }, 0));
+    const evacPct = total > 0 ? Math.round(evacuated / total * 100) : 0;
+    const worst = ev.zones.slice().sort((a, b) => (a.marginMin ?? 9999) - (b.marginMin ?? 9999))[0];
+    const bnCount = ev.bottlenecks?.length || 0;
+    const margin = worst?.marginMin;
+    const marginCls = margin == null ? '' : margin < 0 ? 'crit' : margin < 15 ? 'warn' : '';
+    el.innerHTML = `
+      <span>${total.toLocaleString()} residents</span> ·
+      <span class="${evacPct >= 60 ? '' : 'warn'}">${evacPct}% evacuated</span> ·
+      <span>Critical: <span class="${marginCls}">${worst?.name || '—'} ${margin != null ? margin + 'm margin' : ''}</span></span> ·
+      <span class="${bnCount ? 'warn' : ''}">${bnCount} bottlenecks</span>
+    `;
+  }
+
   showModeToast(mode) {
     const descriptions = {
       MONITOR:  'Monitor Mode — observation only',
@@ -119,6 +153,15 @@ export class HUD {
     }
   }
 
+  setSimRunning(running) {
+    const btn = document.getElementById('btn-pause');
+    if (!btn) return;
+    btn.innerHTML = running
+      ? '<kbd>P</kbd> Pause'
+      : '<kbd>P</kbd> Resume';
+    btn.classList.toggle('paused', !running);
+  }
+
   setMode(mode) {
     this.modeLabel.textContent = mode;
     this.modeLabel.style.color = mode === 'COMMAND' ? 'var(--accent-warm)'
@@ -135,13 +178,25 @@ export class HUD {
 
   setSimTime(min) {
     this._simTimeMin = min;
-    const m = Math.floor(min);
-    const s = Math.floor((min - m) * 60);
-    this.timeLabel.textContent = `T+${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    // Keep scrubber thumb in sync so it reads absolute target time
+    // Military time: scenario ignition + simulated minutes elapsed, in HH:MM.
+    const total = (this._scenarioStartTotalMin + Math.floor(min) + 24 * 60) % (24 * 60);
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    this.timeLabel.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     if (this.timelineSlider && !this.timelineSlider.matches(':active')) {
       this.timelineSlider.value = Math.min(180, Math.round(min));
-      this.timelineValue.textContent = `T+${Math.round(min)}m`;
+      this.timelineValue.textContent = `+${Math.round(min)}m`;
+    }
+  }
+
+  setScenarioStart(meta) {
+    if (!meta?.ignitionTime) {
+      this._scenarioStartTotalMin = 17 * 60 + 37;   // Cedar 2003 default
+      return;
+    }
+    const m = String(meta.ignitionTime).match(/(\d{1,2}):(\d{2})/);
+    if (m) {
+      this._scenarioStartTotalMin = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
     }
   }
 
@@ -152,7 +207,6 @@ export class HUD {
 
   setFire(f) {
     if (!f) return;
-    // Show a compact fire badge in the status bar if not already there.
     if (!this.fireBadge) {
       this.fireBadge = document.createElement('span');
       this.fireBadge.id = 'fire-badge';
@@ -160,6 +214,22 @@ export class HUD {
       document.getElementById('status-bar').appendChild(this.fireBadge);
     }
     this.fireBadge.textContent = `· 🔥 ${f.burningCells}B ${f.burnedCells}Δ`;
+  }
+
+  setFirms(data) {
+    if (!data) return;
+    if (!this.firmsBadge) {
+      this.firmsBadge = document.createElement('span');
+      this.firmsBadge.id = 'firms-badge';
+      this.firmsBadge.title = 'NASA FIRMS — live California wildfire hotspots (last 24 h)';
+      this.firmsBadge.style.cssText = 'margin-left:8px;color:var(--accent-warm);font-size:11px;letter-spacing:0.06em;';
+      document.getElementById('status-bar').appendChild(this.firmsBadge);
+    }
+    if (data.available && data.count != null) {
+      this.firmsBadge.textContent = `· 🛰 ${data.count} CA hotspots`;
+    } else {
+      this.firmsBadge.textContent = '';
+    }
   }
 
   applySnapshot(snap) {

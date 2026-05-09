@@ -74,6 +74,8 @@ class App {
       this._lastCaSnapMin = -Infinity;
       this._buildWorld();
       if (scn.scenarioId) this.hud.setScenario(scn.scenarioId);
+      this.hud.setScenarioStart(scn.scenarioMeta);
+      this.panels.setScenarioContext(scn);
     });
 
     this.socket.on('snapshot', (snap) => {
@@ -82,6 +84,11 @@ class App {
       this.panels.applySnapshot(snap);
       this._applyEvacuationToScene(snap);
       if (this.fireCA && snap.weather) this.fireCA.setWind(snap.weather.windDeg, snap.weather.windKph);
+      if (snap.firms) this.hud.setFirms(snap.firms);
+      if (snap.simRunning != null) {
+        this.hud.setSimRunning(snap.simRunning);
+        if (this.fireCA) this.fireCA.setPaused(!snap.simRunning);
+      }
     });
 
     this.socket.on('tick', ({ simTimeMin }) => {
@@ -144,16 +151,34 @@ class App {
       this.snapshot = { ...(this.snapshot || {}), evacuation: ev };
       this.panels.updateEvacuation(ev);
       this._applyEvacuationToScene(this.snapshot);
+      if (this._currentMode === 'EVACUATE') {
+        this.hud.updateEvacBanner({ ...this.snapshot, populations: this.scenario?.populations });
+      }
     });
 
     this.socket.on('advisor', (msg) => {
       this.panels.appendAdvisor(msg);
       if (this.proactive) this.proactive.notify(msg);
     });
+
+    this.socket.on('firms', (data) => this.hud.setFirms(data));
+
+    this.socket.on('sim', ({ running }) => {
+      this.hud.setSimRunning(running);
+      if (this.fireCA) this.fireCA.setPaused(!running);
+    });
     this.socket.on('fire', (f) => this.hud.setFire(f));
 
     this.socket.on('edge:update', (u) => {
       if (this.roads) this.roads.applyEdgeUpdate(u);
+      // Keep client scenario in sync so the next click toggles instead of re-blocking.
+      if (this.scenario?.edges) {
+        const e = this.scenario.edges.find(ed => ed.id === u.id);
+        if (e) {
+          e.blocked = !!u.blocked;
+          e.contra = !!u.contra;
+        }
+      }
     });
 
     this.socket.on('ptt', (active) => this.hud.setPTT(active));
@@ -201,6 +226,12 @@ class App {
     if (this.shelters)     this.shelters.setEvacMode(isEvac);
     if (this.populations)  this.populations.setEvacMode(isEvac);
     if (this.contraflow)   this.contraflow.setEvacMode(isEvac);
+
+    // Banner is visible only in EVACUATE mode.
+    this.hud.setEvacBannerVisible(isEvac);
+    if (isEvac && this.snapshot) {
+      this.hud.updateEvacBanner({ ...this.snapshot, populations: this.scenario?.populations });
+    }
 
     // EVACUATE: open the evac panel if it isn't already open.
     if (isEvac) {
@@ -330,20 +361,36 @@ class App {
   }
 
   _handleCanvasClick(ev) {
-    // Suppress click if the pointer was dragging (camera rotation gesture).
     if (this.desktop.hasDragged) return;
-    if (!this.snapshot || this.snapshot.mode !== 'COMMAND') return;
-    if (!this.roads) return;
+    if (!this.snapshot) return;
+    const mode = this.snapshot.mode;
+    if (mode !== 'COMMAND' && mode !== 'EVACUATE') return;
     const rect = this.canvas.getBoundingClientRect();
     const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-    const hit = this.roads.pickEdge(this.scene.camera, x, y);
-    if (hit !== null) {
-      const edge = this.scenario.edges.find(ed => ed.id === hit);
-      this.socket.emit('action', {
-        type: 'block-road',
-        payload: { edgeId: hit, blocked: !edge?.blocked }
-      });
+
+    if (mode === 'COMMAND' && this.roads) {
+      const hit = this.roads.pickEdge(this.scene.camera, x, y);
+      if (hit !== null) {
+        const edge = this.scenario.edges.find(ed => ed.id === hit);
+        this.socket.emit('action', {
+          type: 'block-road',
+          payload: { edgeId: hit, blocked: !edge?.blocked }
+        });
+      }
+    } else if (mode === 'EVACUATE' && this.zones) {
+      const zoneName = this.zones.pickZone(this.scene.camera, x, y);
+      if (zoneName) {
+        const zone = this.snapshot.evacuation?.zones?.find(z => z.name === zoneName);
+        if (zone) {
+          // Cycle: 1 (READY) → 2 (SET) → 3 (GO) → 1
+          const nextLevel = (zone.level % 3) + 1;
+          this.socket.emit('action', {
+            type: 'override-zone',
+            payload: { zoneId: zone.id, level: nextLevel }
+          });
+        }
+      }
     }
   }
 

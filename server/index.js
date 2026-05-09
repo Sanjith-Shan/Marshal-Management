@@ -11,6 +11,7 @@ import { EvacuationEngine } from './services/EvacuationEngine.js';
 import { WeatherService } from './services/WeatherService.js';
 import { AIAdvisor } from './services/AIAdvisor.js';
 import { ArduinoService } from './services/ArduinoService.js';
+import { FIRMSService } from './services/FIRMSService.js';
 import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
@@ -38,6 +39,7 @@ const evac = new EvacuationEngine(state);
 const weather = new WeatherService();
 const ai = new AIAdvisor(state, weather);
 const arduino = new ArduinoService();
+const firms = new FIRMSService();
 
 state.attachIO(io);
 
@@ -50,7 +52,8 @@ app.get('/api/health', (req, res) => {
     arduino: arduino.connected,
     aiBackend: ai.backendName(),
     scenario: state.scenario.name,
-    simTime: state.simTimeMin
+    simTime: state.simTimeMin,
+    firms: { available: state.firms?.available, count: state.firms?.count }
   });
 });
 
@@ -238,6 +241,9 @@ async function handleAction(msg, socket) {
       }
       break;
     }
+    case 'sim:toggle':
+      state.toggleSim(payload?.running);
+      break;
     case 'joystick':
       // Broadcast directly to clients so DesktopControls can pulseRotate.
       // Server has no camera state; this is a pure client-side operation.
@@ -265,12 +271,19 @@ arduino.start();
 
 // --------------------- background loops ---------------------
 
-// Sim clock — advances state.simTimeMin
-setInterval(() => state.tickSimulation(), 1000);
+// Sim clock — advances state.simTimeMin by 1 every 2 seconds.
+setInterval(() => state.tickSimulation(), 2000);
 
 // Weather refresh every 5 min
 weather.start();
 weather.on('update', (w) => state.updateWeather(w));
+
+// NASA FIRMS live wildfire feed (real-time California hotspots)
+firms.start();
+firms.on('update', (data) => {
+  state.firms = data;
+  state.broadcast('firms', data);
+});
 
 // Proactive AI: every 60 sec analyze the scene. Big sim-time jumps also kick
 // this in the time-jump handler so the advisor doesn't lag a leaping clock.

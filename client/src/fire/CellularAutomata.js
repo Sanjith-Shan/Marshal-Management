@@ -46,6 +46,7 @@ export class CellularAutomata {
     this.stepCount = 0;
     this.onUpdate = null;
     this._cellArrivalSent = 0;
+    this._paused = false;
 
     // Ignition
     const { gx, gy } = scenario.ignition;
@@ -75,7 +76,13 @@ export class CellularAutomata {
     this.windKph = kph;
   }
 
+  setPaused(paused) {
+    this._paused = !!paused;
+    if (!this._paused) this.tickAccum = 0;
+  }
+
   step(dtSec) {
+    if (this._paused) return false;
     this.tickAccum += dtSec;
     if (this.tickAccum < STEP_INTERVAL) return false;
     this.tickAccum -= STEP_INTERVAL;

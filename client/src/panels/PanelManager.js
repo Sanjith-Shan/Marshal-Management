@@ -49,6 +49,10 @@ export class PanelManager {
     if (snap.advisorMessages) this.panels.advisor.setHistory(snap.advisorMessages);
   }
 
+  setScenarioContext(scenario) {
+    this.panels.evacuation.setHistoricalContext(scenario);
+  }
+
   updateWeather(w) { this.panels.weather.update(w); }
   updateEvacuation(ev) { this.panels.evacuation.update(ev); }
 

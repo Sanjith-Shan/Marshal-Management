@@ -29,8 +29,9 @@ server/                    Node + Express + Socket.IO backend
     ScenarioBuilder.js     Procedurally generates terrain, roads, populations, shelters (seedable)
     StateManager.js        Single source of truth; broadcasts deltas
     EvacuationEngine.js    Capacity-aware Dijkstra + BPR congestion + Ready/Set/Go classifier
-    AIAdvisor.js           Gemini 2.5 Flash w/ full context; rules-based mock fallback
+    AIAdvisor.js           OpenAI gpt-4o-mini w/ full context; rules-based mock fallback
     WeatherService.js      NWS api.weather.gov polling (no key) + mock fallback
+    FIRMSService.js        NASA FIRMS live California wildfire hotspots (key-gated)
     ArduinoService.js      USB-serial reader (optional, soft-imported)
     rng.js                 Mulberry32 seedable PRNG
   _selftest.js             Hidden scenario + evac + AI smoke test
@@ -54,8 +55,11 @@ node server/_e2e.js        # full socket round-trip on :3001
 ```
 
 Optional env (`.env`, see `.env.example`):
-- `GEMINI_API_KEY` — switches AIAdvisor from mock to live Gemini 2.5 Flash
+- `OPENAI_API_KEY` — switches AIAdvisor from mock to live OpenAI gpt-4o-mini
+- `FIRMS_MAP_KEY` — enables NASA FIRMS live hotspot feed (HUD badge + AI context)
+- `CENSUS_API_KEY` — reserved for the real-data swap-in path (population by tract)
 - `DISABLE_ARDUINO=1` — skip serial autodetect entirely
+- `MM_FORCE_MOCK=1` — force AI/FIRMS to mock fallback even if keys are set; used by `_e2e.js`
 - `PORT` — server port (default 3000)
 
 Arduino: the existing `arduino/marshal_board/marshal_board.ino` targets **classic UNO + Arduino IDE + USB serial** and is the working reference. The **production target is Arduino UNO Q** (wireless, battery-powered, Arduino App Lab) — see `BUILD_LOG.md` TODO group H for the planned migration. Don't delete the classic-UNO sketch; the new wireless path will mirror its action protocol.

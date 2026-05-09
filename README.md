@@ -2,7 +2,7 @@
 
 **AR fire-marshal command center — Reboot the Earth 2026, UCSD.**
 
-A 3D topographic map of the active fire zone — viewable on your desktop or as immersive AR on a Meta Quest 3. Live fire spread (Rothermel-lite cellular automata), capacity-aware evacuation routing (Dijkstra + BPR congestion), AI strategic advisor (Gemini 2.5 Flash with full state context), and an optional physical command board (Arduino UNO over USB serial). Keyboard fallback for everything.
+A 3D topographic map of the active fire zone — viewable on your desktop or as immersive AR on a Meta Quest 3. Live fire spread (Rothermel-lite cellular automata), capacity-aware evacuation routing (Dijkstra + BPR congestion), AI strategic advisor (OpenAI gpt-4o-mini with full state context including live NASA FIRMS hotspots), and an optional physical command board (Arduino UNO over USB serial). Keyboard fallback for everything.
 
 ## Quick start
 
@@ -16,14 +16,16 @@ npm run dev
 
 Open the client URL in any modern browser. Click **Enter AR** in a Quest 3 browser to switch to immersive passthrough mode.
 
-### Optional: live AI advisor
+### Optional: live AI advisor + real wildfire data
 
 ```bash
 cp .env.example .env
-# edit .env and set GEMINI_API_KEY
+# edit .env and set OPENAI_API_KEY (and optionally FIRMS_MAP_KEY)
 ```
 
 Without a key, the rules-based **mock-advisor** answers using the same context format. The mock is scenario-aware — it names zones, identifies bottlenecks, recommends contraflow.
+
+With `FIRMS_MAP_KEY` set, the server polls **NASA FIRMS** every 30 minutes for live California wildfire hotspot detections (last 24 hours, VIIRS satellite). The count appears in the HUD status bar and is injected into the AI advisor's context, so it can reason about real fires currently burning in the state alongside the simulated scenario.
 
 ### Optional: hardware command board
 

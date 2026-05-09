@@ -1,8 +1,10 @@
-// AIAdvisor — Gemini 2.5 Flash if GEMINI_API_KEY is set, otherwise a
+// AIAdvisor — OpenAI gpt-4o-mini if OPENAI_API_KEY is set, otherwise a
 // rules-based mock that uses the same context format and returns equally
 // useful, scenario-aware responses.
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
+
+const MODEL = 'gpt-4o-mini';   // fast, cheap, good quality for short advisor turns
 
 const SYSTEM = `You are the AI Strategic Advisor for a fire-marshal AR command system.
 You see the full state: fire, weather, terrain, road network, populations,
@@ -20,21 +22,18 @@ export class AIAdvisor {
     this.client = null;
     this.model = null;
     this.history = [];
-    if (process.env.GEMINI_API_KEY) {
+    if (process.env.OPENAI_API_KEY && process.env.MM_FORCE_MOCK !== '1') {
       try {
-        this.client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        this.model = this.client.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          systemInstruction: SYSTEM
-        });
+        this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        this.model = MODEL;
       } catch (err) {
-        console.warn('[ai] gemini init failed:', err.message);
+        console.warn('[ai] openai init failed:', err.message);
       }
     }
   }
 
   backendName() {
-    return this.model ? 'gemini-2.5-flash' : 'mock-advisor';
+    return this.model ? this.model : 'mock-advisor';
   }
 
   // Detect imperative intents in a natural-language prompt and translate them
@@ -102,6 +101,16 @@ export class AIAdvisor {
   buildContext() {
     const s = this.state;
     const lines = [];
+    // Real-world historical context (Cedar 2003, Witch 2007)
+    const meta = s.scenario.scenarioMeta;
+    if (meta && meta.realDate && meta.realDate !== 'fictional') {
+      lines.push(`HISTORICAL CONTEXT — ${s.scenario.scenarioName}:`);
+      lines.push(`- Real event: ${meta.realDate}, started ${meta.ignitionTime || '—'}, cause: ${meta.cause || '—'}`);
+      if (meta.acresBurned)    lines.push(`- ${meta.acresBurned.toLocaleString()} acres burned, ${meta.fatalities} fatalities, ${(meta.homesDestroyed||0).toLocaleString()} homes destroyed, ${(meta.evacuated||0).toLocaleString()} evacuated`);
+      if (meta.windDuringEvent) lines.push(`- Wind during event: ${meta.windDuringEvent}`);
+      if (meta.summary)         lines.push(`- ${meta.summary}`);
+      lines.push(``);
+    }
     lines.push(`Sim time: ${s.simTimeMin.toFixed(1)} min   Mode: ${s.mode}`);
     lines.push(`Weather: wind ${Math.round(s.weather.windKph)} kph from ${Math.round(s.weather.windDeg)}°, gusts ${Math.round(s.weather.gustKph)} kph, RH ${Math.round(s.weather.humidity)}%, ${s.weather.redFlag ? 'RED FLAG' : 'no flag'}`);
     lines.push(`Fire: ${s.fire.burningCells} burning cells, ${s.fire.burnedCells} burned, perimeter ${s.fire.perimeterCells}`);
@@ -136,6 +145,18 @@ export class AIAdvisor {
         .map(b => `edge ${b.edgeId} (${Math.round(b.ratio * 100)}% cap)`).join(', ');
       lines.push(`- Top bottlenecks: ${top}`);
     }
+    // Real-world context: live NASA FIRMS California wildfire hotspots
+    if (s.firms?.available && s.firms.count > 0) {
+      lines.push(``);
+      lines.push(`LIVE STATEWIDE FIRE ACTIVITY (NASA FIRMS, last 24 h):`);
+      lines.push(`- ${s.firms.count} active satellite-detected hotspots in California`);
+      if (s.firms.hotspots?.length) {
+        const top = s.firms.hotspots.slice(0, 3)
+          .map(h => `(${h.lat?.toFixed(2)}, ${h.lng?.toFixed(2)}) FRP ${h.frp || '?'}`)
+          .join(', ');
+        lines.push(`- Top by location: ${top}`);
+      }
+    }
     return lines.join('\n');
   }
 
@@ -154,19 +175,28 @@ export class AIAdvisor {
 
   async ask(prompt) {
     const ctx = this.buildContext();
-    if (this.model) {
+    if (this.client && this.model) {
       try {
-        const full = `CONTEXT:\n${ctx}\n\nMARSHAL: ${prompt}`;
-        const result = await this.model.generateContent(full);
-        const text = result.response.text().trim();
-        return {
-          severity: this._severity(text),
-          source: 'AI',
-          text,
-          prompt
-        };
+        const completion = await this.client.chat.completions.create({
+          model: this.model,
+          messages: [
+            { role: 'system', content: SYSTEM },
+            { role: 'user',   content: `CONTEXT:\n${ctx}\n\nMARSHAL: ${prompt}` }
+          ],
+          max_tokens: 220,
+          temperature: 0.25,    // factual, not creative
+        });
+        const text = (completion.choices?.[0]?.message?.content || '').trim();
+        if (text) {
+          return {
+            severity: this._severity(text),
+            source: 'AI',
+            text,
+            prompt
+          };
+        }
       } catch (err) {
-        console.warn('[ai] gemini failed, falling back:', err.message);
+        console.warn('[ai] openai failed, falling back:', err.message);
       }
     }
     return this._mockReply(prompt, ctx);

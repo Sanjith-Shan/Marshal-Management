@@ -19,8 +19,20 @@ function assert(cond, msg) {
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
 (async function main() {
-  // Start server on alt port
-  const env = { ...process.env, PORT: '3001', DISABLE_ARDUINO: '1' };
+  // Start server on alt port. Force mock backends so the test is hermetic
+  // and doesn't depend on (slow / paid) external API roundtrips. Scrub
+  // any real API keys from the child env defensively.
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.OPENAI_API_KEY;
+  delete cleanEnv.FIRMS_MAP_KEY;
+  delete cleanEnv.CENSUS_API_KEY;
+  delete cleanEnv.GEMINI_API_KEY;
+  const env = {
+    ...cleanEnv,
+    PORT: '3001',
+    DISABLE_ARDUINO: '1',
+    MM_FORCE_MOCK: '1',
+  };
   const proc = spawn('node', ['server/index.js'], { env, stdio: 'inherit' });
   await wait(2000);
 

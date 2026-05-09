@@ -178,6 +178,8 @@ html, body, #app {
 .ctl-reset { color: var(--text-dim); }
 .ctl-time { color: var(--accent); letter-spacing: 0.04em; }
 .ctl-time:hover { background: rgba(120, 200, 255, 0.12); border-color: var(--accent); }
+.ctl-pause { color: var(--accent-warm); }
+.ctl-pause.paused { background: rgba(245, 215, 110, 0.18); border-color: var(--accent-yellow); color: var(--accent-yellow); }
 .ctl-scenario {
   appearance: none;
   -webkit-appearance: none;
@@ -431,6 +433,52 @@ kbd {
   cursor: pointer;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+#evac-banner {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+}
+#evac-banner.hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-12px);
+  pointer-events: none;
+}
+.evac-banner-inner {
+  background: linear-gradient(180deg, rgba(255,95,95,0.18), rgba(20,28,40,0.78));
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--accent-hot);
+  border-radius: 12px;
+  padding: 10px 22px;
+  box-shadow: 0 0 24px rgba(255, 95, 95, 0.25);
+  text-align: center;
+  min-width: 460px;
+}
+.evac-banner-title {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  color: var(--accent-hot);
+  margin-bottom: 4px;
+}
+.evac-banner-stats {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.evac-banner-stats .crit { color: var(--accent-hot); font-weight: 700; }
+.evac-banner-stats .warn { color: var(--accent-warm); font-weight: 600; }
+.evac-banner-hint {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
 }
 
 .mode-toast {

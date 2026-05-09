@@ -4,6 +4,7 @@ export class EvacuationPanel extends Panel {
   constructor(layer, position) {
     super(layer, 'EVACUATION STATUS', position);
     this.body.innerHTML = `
+      <div id="ev-historical" style="display:none;background:rgba(255,184,107,0.06);border-left:2px solid var(--accent-warm);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.45"></div>
       <div id="ev-overview" class="metric-grid"></div>
       <h3>ZONES</h3>
       <div id="ev-zones"></div>
@@ -12,6 +13,29 @@ export class EvacuationPanel extends Panel {
       <h3>BOTTLENECKS</h3>
       <div id="ev-bot" style="font-size:11px;color:var(--text-dim)">—</div>
     `;
+  }
+  setHistoricalContext(scenario) {
+    const el = this.body.querySelector('#ev-historical');
+    if (!el) return;
+    const meta = scenario?.scenarioMeta;
+    if (!meta || meta.realDate === 'fictional') {
+      el.style.display = 'none';
+      return;
+    }
+    const stats = [];
+    if (meta.acresBurned)    stats.push(`${meta.acresBurned.toLocaleString()} acres`);
+    if (meta.fatalities)     stats.push(`${meta.fatalities} fatalities`);
+    if (meta.homesDestroyed) stats.push(`${meta.homesDestroyed.toLocaleString()} homes lost`);
+    if (meta.evacuated)      stats.push(`${meta.evacuated.toLocaleString()} evacuated`);
+    el.innerHTML = `
+      <div style="font-weight:700;letter-spacing:0.08em;color:var(--accent-warm);margin-bottom:4px">
+        ${scenario.scenarioName} · ${meta.realDate}
+      </div>
+      <div style="color:var(--text-dim);margin-bottom:5px">${stats.join(' · ')}</div>
+      <div>${meta.summary || ''}</div>
+      ${meta.windDuringEvent ? `<div style="margin-top:4px;color:var(--text-dim)">Wind: ${meta.windDuringEvent}</div>` : ''}
+    `;
+    el.style.display = 'block';
   }
   update(ev, snap) {
     if (!ev) return;

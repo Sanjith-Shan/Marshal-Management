@@ -72,8 +72,18 @@ export class ZoneRenderer {
       const outline = new THREE.Line(outlineGeom, outlineMat);
       this.group.add(outline);
 
+      mesh.userData.zoneName = zone;
       this.byZone.set(zone, { mesh, outline, level: 1 });
     }
+  }
+
+  pickZone(camera, ndcX, ndcY) {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x: ndcX, y: ndcY }, camera);
+    const meshes = [...this.byZone.values()].map(r => r.mesh);
+    const hits = ray.intersectObjects(meshes, false);
+    if (!hits.length) return null;
+    return hits[0].object.userData.zoneName ?? null;
   }
 
   setEvacMode(active) {

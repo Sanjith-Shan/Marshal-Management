@@ -51,6 +51,8 @@ export class Keybindings {
         break;
       case 'KeyT':
         this.hud.toggleTimeline(); break;
+      case 'KeyP':
+        this.socket.emit('action', { type: 'sim:toggle' }); break;
       case 'BracketRight':
         this.socket.emit('action', {
           type: 'time-jump',

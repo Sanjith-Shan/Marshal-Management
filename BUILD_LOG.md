@@ -3,6 +3,32 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 6
+
+**Gemini → OpenAI swap, live NASA FIRMS feed, historical Cedar Fire metadata.** Single batch, gates green.
+
+**1. AI backend swap (Gemini → OpenAI gpt-4o-mini).** Replaced `@google/generative-ai` with `openai@^4.73.0`. `AIAdvisor` constructor now creates an OpenAI client gated on `OPENAI_API_KEY`. `ask()` uses Chat Completions with `max_tokens: 220, temperature: 0.25, model: 'gpt-4o-mini'`. Mock fallback unchanged. Live ping confirmed: ~2.5 s typical latency, severity classification working. Same `{ severity, source, text, prompt }` return shape so all consumers stay unchanged.
+
+**2. Live NASA FIRMS hotspot feed (`server/services/FIRMSService.js`).** New service polls NASA FIRMS' VIIRS_SNPP_NRT API every 30 min for the California bounding box (`-125,32,-114,42`), parses CSV, broadcasts `{ available, count, hotspots, fetchedAt }` via the `firms` socket event. Live ping returned 51 active hotspots in 400 ms. Wired into:
+   - `state.firms` field; carried in `snapshot()`.
+   - HUD `setFirms` renders a `🛰 N CA hotspots` badge in the status bar.
+   - `AIAdvisor.buildContext` injects a `LIVE STATEWIDE FIRE ACTIVITY` block listing count + top hotspots by FRP, so the advisor can reference real wildfires alongside the simulated scenario.
+
+**3. Real 2003 Cedar Fire / 2007 Witch Creek metadata.** `SCENARIOS` dict now embeds `meta` per scenario:
+   - **Cedar 2003**: ignited 2003-10-25 17:37 PDT by lost hunter's flare at (33.0356, -116.7); 273,246 acres, 15 fatalities, 2,820 homes destroyed, ~70,000 evacuated, Santa Ana NE 40-60 mph during event.
+   - **Witch Creek 2007**: ignited 2007-10-21 12:35 PDT by SDG&E power line arc at (33.0833, -116.7167); 197,990 acres, 2 fatalities, 1,650 homes, ~500,000 evacuated.
+   - **Plumas Approach**: marked synthetic worst-case.
+
+   Meta is carried through `publicScenario.scenarioMeta`, surfaced in `EvacuationPanel` as a header banner, and injected into the AI advisor's context so it can reference real-world facts ("This is similar to the 2003 Cedar Fire which destroyed 2820 homes").
+
+**4. Hermetic e2e gate.** `MM_FORCE_MOCK=1` env var explicitly disables OpenAI / FIRMS clients regardless of key presence. `_e2e.js` sets it (plus scrubs real keys from spawn env defensively) so the gate doesn't depend on external API roundtrips.
+
+**Verification.** `npm run build` clean. `node server/_selftest.js` 25/25. `node server/_e2e.js` 14/14. Live OpenAI roundtrip confirmed (gpt-4o-mini, 2.5 s). Live FIRMS roundtrip confirmed (51 hotspots, 400 ms).
+
+**Next priorities (still open):** AR / Quest 3 / HTTPS path, hardware UNO physical end-to-end test, real-data swap-in (USGS 3DEP terrain + LANDFIRE FBFM40 fuel + Census tract populations using the new keys), 30-min/1-hr fire projection ghost layer.
+
+---
+
 ## 2026-05-08 — session 5
 
 **Demo scenario library + picker, contraflow animation, AI terrain overlays.** Three commits, gates green throughout.

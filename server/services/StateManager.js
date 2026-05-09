@@ -49,6 +49,7 @@ export class StateManager extends EventEmitter {
     this.aiProactiveEnabled = true;
     this.ptt = false;
     this.timelineMin = 0;
+    this.firms = { available: false, count: 0, hotspots: [] };
 
     // Snapshot ring for time-jump rewind (TODO group H3). Pushed every
     // SNAPSHOT_INTERVAL_MIN simulated minutes via tickSimulation; bounded to
@@ -76,6 +77,7 @@ export class StateManager extends EventEmitter {
       seed: this.scenario.seed,
       scenarioId: this.scenario.scenarioId,
       scenarioName: this.scenario.scenarioName,
+      scenarioMeta: this.scenario.scenarioMeta,
       name: this.scenario.name,
       gridSize: this.scenario.gridSize,
       worldMeters: this.scenario.worldMeters,
@@ -94,6 +96,7 @@ export class StateManager extends EventEmitter {
   snapshot() {
     return {
       simTimeMin: this.simTimeMin,
+      simRunning: this.simRunning,
       mode: this.mode,
       panels: { ...this.panels },
       weather: { ...this.weather },
@@ -110,6 +113,7 @@ export class StateManager extends EventEmitter {
       advisorMessages: this.advisorMessages.slice(-20),
       ptt: this.ptt,
       timelineMin: this.timelineMin,
+      firms: this.firms,
       edgeBlockedIds: this.scenario.edges.filter(e => e.blocked).map(e => e.id),
       edgeContraflowIds: this.scenario.edges.filter(e => e.contra).map(e => e.id)
     };
@@ -119,8 +123,9 @@ export class StateManager extends EventEmitter {
 
   tickSimulation() {
     if (!this.simRunning) return;
-    // Demo time: 1 wall-second = 0.5 simulated minute (so a 60 min event plays out in 2 minutes).
-    this.simTimeMin += 0.5;
+    // Demo time: 2 wall-seconds = 1 simulated minute. A 60-min event plays
+    // in 2 real minutes; clean integer-minute increments suit HH:MM display.
+    this.simTimeMin += 1;
     if (this.simTimeMin > 600) this.simRunning = false;
     this.maybePushSnapshot();
     this.broadcast('tick', { simTimeMin: this.simTimeMin });
@@ -231,6 +236,11 @@ export class StateManager extends EventEmitter {
     this.mode = mode;
     this.broadcast('mode', mode);
     this.broadcast('snapshot', this.snapshot());
+  }
+
+  toggleSim(running) {
+    this.simRunning = running == null ? !this.simRunning : !!running;
+    this.broadcast('sim', { running: this.simRunning });
   }
 
   togglePanel(name) {
