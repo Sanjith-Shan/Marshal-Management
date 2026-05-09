@@ -54,6 +54,17 @@ export class TerrainMesh {
     return new THREE.Vector3(x, y, z);
   }
 
+  // Inverse of gridToWorld: take a local-space (x, z) point on the terrain
+  // mesh and return its grid (gx, gy). Used to convert a click on the
+  // terrain into a position the scenario / engine can reason about.
+  worldToGrid(x, z) {
+    const ux = (x / this.size) + 0.5;
+    const uz = (z / this.size) + 0.5;
+    const gx = Math.max(0, Math.min(this.grid - 1, ux * this.grid));
+    const gy = Math.max(0, Math.min(this.grid - 1, uz * this.grid));
+    return { gx, gy };
+  }
+
   worldHeightAt(x, z) {
     const ux = x / TERRAIN_WORLD + 0.5;
     const uz = z / TERRAIN_WORLD + 0.5;

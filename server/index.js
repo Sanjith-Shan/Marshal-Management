@@ -281,6 +281,10 @@ async function handleAction(msg, socket) {
       state.designateShelter(payload);
       await evac.runFullEvacuation();
       break;
+    case 'compromise-shelter':
+      state.compromiseShelter(payload?.nodeId, payload?.compromised);
+      await evac.runFullEvacuation();
+      break;
     case 'override-zone':
       state.overrideZoneLevel(payload.zoneId, payload.level);
       break;

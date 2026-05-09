@@ -180,6 +180,15 @@ class App {
 
     this.socket.on('census', (data) => this.panels.setCensus(data));
 
+    // Server broadcasts the shelter list whenever a user designates a new
+    // shelter or compromises one in COMMAND mode. Sync local scenario data
+    // and add/refresh markers; the renderer never deletes existing ones.
+    this.socket.on('shelters', (shelters) => {
+      if (!Array.isArray(shelters)) return;
+      if (this.scenario) this.scenario.shelters = shelters;
+      if (this.shelters) this.shelters.syncShelters(shelters);
+    });
+
     this.socket.on('sim', ({ running }) => {
       this.hud.setSimRunning(running);
       if (this.fireCA) this.fireCA.setPaused(!running);
@@ -428,14 +437,46 @@ class App {
     const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (mode === 'COMMAND' && this.roads) {
-      const hit = this.roads.pickEdge(this.scene.camera, x, y);
-      if (hit !== null) {
-        const edge = this.scenario.edges.find(ed => ed.id === hit);
+    if (mode === 'COMMAND') {
+      // Click priority in COMMAND:
+      //   1. shelter diamond hit  → toggle compromised flag
+      //   2. road pick proxy hit  → block / unblock that edge
+      //   3. Shift held + nothing else hit → designate new shelter at the
+      //      nearest road node to the terrain click point
+      const shelterId = this.shelters?.pickShelter(this.scene.camera, x, y);
+      if (shelterId !== null && shelterId !== undefined) {
+        const sh = this.scenario.shelters.find(s => s.nodeId === shelterId);
+        const next = !sh?.compromised;
         this.socket.emit('action', {
-          type: 'block-road',
-          payload: { edgeId: hit, blocked: !edge?.blocked }
+          type: 'compromise-shelter',
+          payload: { nodeId: shelterId, compromised: next }
         });
+        this.hud.showActionToast(
+          `${sh?.name || 'shelter'} ${next ? 'COMPROMISED' : 'restored'}`,
+          next ? 'crit' : 'ok'
+        );
+        return;
+      }
+      if (this.roads) {
+        const hit = this.roads.pickEdge(this.scene.camera, x, y);
+        if (hit !== null) {
+          const edge = this.scenario.edges.find(ed => ed.id === hit);
+          this.socket.emit('action', {
+            type: 'block-road',
+            payload: { edgeId: hit, blocked: !edge?.blocked }
+          });
+          return;
+        }
+      }
+      if (ev.shiftKey && this.terrain) {
+        const grid = this._terrainGridAtClick(x, y);
+        if (grid) {
+          this.socket.emit('action', {
+            type: 'designate-shelter',
+            payload: { gx: grid.gx, gy: grid.gy }
+          });
+          this.hud.showActionToast('New shelter designated', 'ok');
+        }
       }
     } else if (mode === 'EVACUATE' && this.zones) {
       const zoneName = this.zones.pickZone(this.scene.camera, x, y);
@@ -453,6 +494,23 @@ class App {
         }
       }
     }
+  }
+
+  // Raycast against the terrain mesh from a screen-space click and return
+  // the corresponding grid coords. Used by COMMAND-mode Shift+click to
+  // designate a new shelter at the clicked point. Returns null if the ray
+  // misses the terrain.
+  _terrainGridAtClick(ndcX, ndcY) {
+    if (!this.terrain?.mesh) return null;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({ x: ndcX, y: ndcY }, this.scene.camera);
+    const hits = ray.intersectObject(this.terrain.mesh, false);
+    if (!hits.length) return null;
+    // Hit point is in world space; convert to terrainGroup-local space
+    // first (terrainGroup may be translated/scaled, e.g. in AR mode),
+    // then to grid coords.
+    const local = this.scene.terrainGroup.worldToLocal(hits[0].point.clone());
+    return this.terrain.worldToGrid(local.x, local.z);
   }
 
   _raf() {

@@ -213,23 +213,41 @@ function generateFuelGrid(heightmap, rng) {
       const h = heightmap[y * GRID + x];
       const r = rng();
       let fuel;
-      if (h < 0.18) fuel = FUEL.ROCK;          // dry creek beds / rock
-      else if (h < 0.32) {
-        fuel = r < 0.7 ? FUEL.GRASS : FUEL.CHAPARRAL;
-      } else if (h < 0.55) {
-        fuel = r < 0.55 ? FUEL.CHAPARRAL : (r < 0.85 ? FUEL.GRASS : FUEL.TIMBER);
-      } else if (h < 0.75) {
-        fuel = r < 0.7 ? FUEL.TIMBER : FUEL.CHAPARRAL;
+      // ROCK threshold dropped from 0.18 → 0.03. With the real USGS DEM
+      // range (0–1616m), 0.18 corresponded to ~290m elevation — most of
+      // San Diego's populated valleys, which were being classified as
+      // non-burnable. 0.03 ≈ ~50m, only true ocean/lake. Inland everything
+      // gets a burnable fuel.
+      if (h < 0.03) fuel = FUEL.ROCK;
+      else if (h < 0.18) {
+        // Coastal flats / urban valleys — light grass with shrub patches.
+        fuel = r < 0.55 ? FUEL.GRASS : FUEL.CHAPARRAL;
+      } else if (h < 0.40) {
+        // Foothills — chaparral dominated.
+        fuel = r < 0.65 ? FUEL.CHAPARRAL : (r < 0.90 ? FUEL.GRASS : FUEL.TIMBER);
+      } else if (h < 0.70) {
+        // Mid-elevation — timber + chaparral.
+        fuel = r < 0.65 ? FUEL.TIMBER : FUEL.CHAPARRAL;
       } else {
-        fuel = r < 0.6 ? FUEL.TIMBER : FUEL.ROCK;
+        // Peaks — timber with rock outcrops.
+        fuel = r < 0.7 ? FUEL.TIMBER : FUEL.ROCK;
       }
       arr[y * GRID + x] = fuel;
     }
   }
-  // Carve an "urban" cluster around the southwestern flat (Scripps Ranch-ish)
-  carveUrban(arr, heightmap, 28, 38, 11);
-  carveUrban(arr, heightmap, 64, 50, 9);   // Poway-ish
-  carveUrban(arr, heightmap, 96, 78, 8);   // Ramona-ish
+  // Carve URBAN over real San Diego community centers (lat/lng → grid)
+  // so populated areas show as urban fuel and the demo scenario aligns
+  // with where evacuees actually live.
+  const carveAt = (lat, lng, radius) => {
+    const { gx, gy } = latLngToGrid(lat, lng);
+    carveUrban(arr, heightmap, Math.round(gx), Math.round(gy), radius);
+  };
+  carveAt(32.927, -117.084, 10);   // Scripps Ranch
+  carveAt(32.963, -117.038,  9);   // Poway
+  carveAt(33.041, -116.868,  8);   // Ramona
+  carveAt(32.918, -117.131, 12);   // Mira Mesa (broader coastal urban)
+  carveAt(32.7831, -117.1196, 10); // Mission Valley / Qualcomm
+  carveAt(32.99,   -117.07,   8);  // Rancho Peñasquitos / Carmel Mountain
   return arr;
 }
 
@@ -239,7 +257,9 @@ function carveUrban(fuel, height, cx, cy, r) {
       if (x < 0 || y < 0 || x >= GRID || y >= GRID) continue;
       const dx = x - cx, dy = y - cy;
       const d = Math.sqrt(dx * dx + dy * dy);
-      if (d <= r && height[y * GRID + x] < 0.6) fuel[y * GRID + x] = FUEL.URBAN;
+      // Threshold relaxed: real urban SD is below ~0.4 normalised height,
+      // not 0.6, since the DEM range now extends to 1616m peaks.
+      if (d <= r && height[y * GRID + x] < 0.4) fuel[y * GRID + x] = FUEL.URBAN;
     }
   }
 }

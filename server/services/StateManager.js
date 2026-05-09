@@ -267,9 +267,67 @@ export class StateManager extends EventEmitter {
   blockRoad(edgeId, blocked = true) {
     const e = this.scenario.edges.find(e => e.id === edgeId);
     if (!e) return;
-    e.blocked = !!blocked;
+    if (blocked) {
+      // Extend the block to adjacent same-class edges for major roads.
+      // A single OSM edge is ~500 m of road between intersections; without
+      // this, clicking I-15 closes one short segment and traffic flows
+      // around it via the next edge of I-15. We close a meaningful chunk
+      // (~3-5 edges of motorway / trunk / primary) so the demo reads as
+      // "highway closed."
+      const cluster = this._findBlockCluster(edgeId);
+      for (const id of cluster) {
+        const ce = this.scenario.edges.find(x => x.id === id);
+        if (!ce || ce.blocked) continue;
+        ce.blocked = true;
+        this.broadcast('edge:update', { id: ce.id, blocked: true, contra: ce.contra });
+      }
+    } else {
+      // Surgical unblock — single edge only. Re-clicking any X marker in
+      // a previously-clustered block opens just that segment.
+      e.blocked = false;
+      this.broadcast('edge:update', { id: e.id, blocked: false, contra: e.contra });
+    }
     this.evacuation.lostRoads = this.scenario.edges.filter(e => e.blocked).length;
-    this.broadcast('edge:update', { id: e.id, blocked: e.blocked, contra: e.contra });
+  }
+
+  // BFS through edges of the same hwy class up to a class-specific cap.
+  // Used by blockRoad to extend a single click into a meaningful highway
+  // closure. Caps prevent overshoot in dense urban primary-road grids.
+  _findBlockCluster(edgeId) {
+    const e = this.scenario.edges.find(x => x.id === edgeId);
+    if (!e) return [edgeId];
+    const limits = { motorway: 6, trunk: 5, primary: 4, motorway_link: 3, trunk_link: 3, primary_link: 2 };
+    const max = limits[e.hwy] || 1;
+    if (max === 1) return [edgeId];
+
+    // Build node → same-class edges map (lazy, per call; could memoize).
+    const sameClass = this.scenario.edges.filter(x => x.hwy === e.hwy && !x.blocked);
+    const byNode = new Map();
+    for (const x of sameClass) {
+      if (!byNode.has(x.u)) byNode.set(x.u, []);
+      if (!byNode.has(x.v)) byNode.set(x.v, []);
+      byNode.get(x.u).push(x.id);
+      byNode.get(x.v).push(x.id);
+    }
+    const cluster = new Set([edgeId]);
+    const queue = [edgeId];
+    while (queue.length && cluster.size < max) {
+      const cur = queue.shift();
+      const ce = this.scenario.edges.find(x => x.id === cur);
+      if (!ce) continue;
+      for (const nodeId of [ce.u, ce.v]) {
+        const adj = byNode.get(nodeId) || [];
+        for (const aId of adj) {
+          if (cluster.size >= max) break;
+          if (!cluster.has(aId)) {
+            cluster.add(aId);
+            queue.push(aId);
+          }
+        }
+        if (cluster.size >= max) break;
+      }
+    }
+    return [...cluster];
   }
 
   setContraflow(edgeId, enabled) {
@@ -279,10 +337,60 @@ export class StateManager extends EventEmitter {
     this.broadcast('edge:update', { id: e.id, blocked: e.blocked, contra: e.contra });
   }
 
-  designateShelter({ nodeId, name, capacity }) {
-    if (this.scenario.shelters.find(s => s.nodeId === nodeId)) return;
-    this.scenario.shelters.push({ nodeId, name, capacity, used: 0 });
+  designateShelter({ nodeId, gx, gy, name, capacity }) {
+    // Two entry paths: by nodeId (legacy/voice) or by grid coords (click).
+    let resolvedNodeId = nodeId;
+    if (resolvedNodeId == null && gx != null && gy != null) {
+      resolvedNodeId = this._nearestNodeId(gx, gy);
+    }
+    if (resolvedNodeId == null) return;
+    if (this.scenario.shelters.find(s => s.nodeId === resolvedNodeId)) return;
+    const auto = this.scenario.shelters.length + 1;
+    this.scenario.shelters.push({
+      nodeId: resolvedNodeId,
+      name: name || `Shelter ${auto}`,
+      capacity: capacity || 1000,
+      compromised: false,
+      used: 0,
+      addedByUser: true,
+    });
+    // Mirror in evacuation.shelterUsage so the EvacuationPanel sees the
+    // new shelter immediately, even before the next evac runs.
+    this.evacuation.shelterUsage = this.scenario.shelters.map(s => ({
+      nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0,
+      compromised: !!s.compromised,
+    }));
     this.broadcast('shelters', this.scenario.shelters);
+    this.broadcast('snapshot', this.snapshot());
+  }
+
+  // Toggle the "compromised" flag on a shelter. Compromised shelters are
+  // filtered out of evacuation routing but stay in scenario.shelters per
+  // user instruction (NEVER delete). Visual state on client.
+  compromiseShelter(nodeId, compromised) {
+    const s = this.scenario.shelters.find(s => s.nodeId === nodeId);
+    if (!s) return;
+    s.compromised = compromised == null ? !s.compromised : !!compromised;
+    this.evacuation.shelterUsage = this.scenario.shelters.map(sh => ({
+      nodeId: sh.nodeId, name: sh.name, capacity: sh.capacity,
+      used: this.evacuation.shelterUsage.find(u => u.nodeId === sh.nodeId)?.used || 0,
+      compromised: !!sh.compromised,
+    }));
+    this.broadcast('shelters', this.scenario.shelters);
+    this.broadcast('snapshot', this.snapshot());
+  }
+
+  // Find the nearest road node to a given grid coord. Used by designate-
+  // shelter when the user clicks empty terrain — snap the shelter to the
+  // routing graph so evac engine can reach it.
+  _nearestNodeId(gx, gy) {
+    let bestId = null, bestD = Infinity;
+    for (const n of this.scenario.nodes) {
+      const dx = n.x - gx, dy = n.z - gy;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; bestId = n.id; }
+    }
+    return bestId;
   }
 
   overrideZoneLevel(zoneId, level) {

@@ -113,7 +113,10 @@ export class EvacuationEngine {
   async runFullEvacuation() {
     const { populations, shelters, edges } = this.state.scenario;
     const adj = this.buildGraph();
-    const shelterIds = new Set(shelters.map(s => s.nodeId));
+    // Compromised shelters (user-marked unavailable in COMMAND mode) are
+    // excluded from routing. They stay in the shelters list per UX
+    // instruction — only their availability flips.
+    const shelterIds = new Set(shelters.filter(s => !s.compromised).map(s => s.nodeId));
     const congestion = new Map();    // edgeId -> assigned vehicles in headway window
     const edgeFlow = new Map();
     const shelterUsed = new Map(shelters.map(s => [s.nodeId, 0]));

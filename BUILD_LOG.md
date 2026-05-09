@@ -5,6 +5,112 @@
 
 ---
 
+## 2026-05-09 — session 19 (plan: fire stop bug + block-road dots + shelter management)
+
+### Problem report
+
+User testing surfaced three issues:
+
+1. **Fire stops mid-map and fails to progress.** Fire ignites at Cedar Creek but freezes well before reaching populated areas.
+2. **Dots still flow through "blocked" roads.** User clicks a road in COMMAND mode, the X marker appears, but route dots visibly continue using that path.
+3. **Shelter management absent.** No way to add new shelters or mark existing ones as out-of-service. User wants this in COMMAND mode and explicitly NEVER deletes — just compromises.
+
+### Diagnosis
+
+**Issue 1 (fire stops)**: `ScenarioBuilder.generateFuelGrid` thresholds fuel by normalized heightmap value (`h < 0.18 → ROCK`). With the real USGS DEM range 0–1616m (sea level → Cleveland NF peaks), `h < 0.18` corresponds to elevation < ~290m — most of San Diego's populated valleys. They're being classified as ROCK (no fuel = no spread). Fire reaches the foothill edge and dies because adjacent cells are non-burnable. Compounding: `carveUrban` calls use hardcoded grid coords (28,38), (64,50), (96,78) — calibrated for the *original* bbox, now misaligned with real community positions in the new bbox.
+
+**Issue 2 (dots through blocked)**: `EvacuationEngine.buildGraph` correctly excludes blocked edges, but clicking I-15 blocks ONE OSM edge between intersections (~500m). Adjacent edges of the SAME highway remain open. Dijkstra reroutes locally around the single blocked segment via the next adjacent edges, so the visual "I-15 corridor" still has flowing dots — they're just on the next edge over. User's expectation: a single click closes a meaningful chunk of the road.
+
+**Issue 3 (shelter management)**: feature gap. Need design.
+
+### Plan
+
+**P0 — fix fire spread (`ScenarioBuilder.js`)**
+
+- Drop ROCK threshold `h < 0.18` → `h < 0.03` so only ocean/lakes are non-burnable.
+- Reproject `carveUrban` centers using `latLngToGrid()` for Scripps Ranch / Poway / Ramona — uses real lat/lng instead of stale grid coords.
+- Add an extra carve for SD city centroid (largest population in Census reference) so populated coastal valleys get URBAN classification.
+
+**P0 — fix block-road extension (`StateManager.blockRoad`)**
+
+Server-side: when blocking a major road (motorway / trunk / primary), also block edges within 1 graph-hop that share the same `hwy` class. Cap the cluster size by class:
+- motorway: up to 6 edges
+- trunk: up to 5 edges
+- primary: up to 4 edges
+- everything else: just the clicked edge
+
+Each affected edge emits its own `edge:update` so the client renders multiple X markers across the closed segment. Re-clicking any X in the cluster unblocks it (current behavior — single edge toggle).
+
+**P1 — shelter management (server + client)**
+
+Data: new `compromised: bool` field on each shelter object (default false). `EvacuationEngine.runFullEvacuation` filters compromised shelters out of `availableShelters` so routes don't target them.
+
+Server actions:
+- `designate-shelter { gridGx, gridGy, name?, capacity? }` — extends, accepts grid coords, finds nearest road node, adds. Default capacity 1000, default name "Shelter N".
+- `compromise-shelter { nodeId, compromised: bool }` — toggles flag. NEVER deletes from the list per user instruction.
+
+Client COMMAND-mode click routing (`main.js _handleCanvasClick`):
+- Raycast pick proxy → road click → block-road (existing).
+- Else raycast `shelters.group` → shelter click → compromise-shelter (toggle).
+- Else if Shift held → raycast terrain mesh → grid coords → designate-shelter.
+
+`ShelterMarker` visualizes compromised shelters with grey diamond + reduced emissive + red strike ring.
+
+After any action: server re-runs `evac.runFullEvacuation` so routes adapt.
+
+### Risks / open questions
+
+- 1-hop block extension might overshoot in dense primary-road grids. Cap by class (above) mitigates.
+- Compromising the only shelter for a zone yields null route. Existing "NO ROUTE" advisor covers it.
+- New-shelter click finds the nearest **road** node (not nearest grid cell), so adds attach to the routing graph automatically.
+
+### Execution order
+
+1. Fix fire spread (P0)
+2. Fix block-road extension (P0)
+3. Shelter add + compromise (P1)
+4. Update this entry with outcomes
+5. Run gates, commit, push
+
+### Outcomes
+
+**Fire spread (P0) — fixed.** `ScenarioBuilder.generateFuelGrid`:
+- ROCK threshold dropped 0.18 → 0.03. Fuel distribution at the real DEM Cedar bbox: ROCK 11.2%, GRASS 24.9%, CHAPARRAL 39.2%, TIMBER 16.1%, URBAN 8.6% (verified by inline test). Previously the same DEM gave ~50% ROCK in valleys → fire dead zones.
+- Urban-carve centers reprojected via `latLngToGrid()` for Scripps Ranch, Poway, Ramona; added Mira Mesa, Mission Valley/Qualcomm, Rancho Peñasquitos for richer urban coverage. `carveUrban` height threshold relaxed 0.6 → 0.4 for new normalised range.
+- Fire now propagates through populated valleys instead of stalling at the foothill–valley boundary.
+
+**Block-road extension (P0) — implemented.** `StateManager.blockRoad(edgeId, blocked=true)`:
+- BFS through same-class adjacency from the clicked edge, capped per class (motorway 6, trunk 5, primary 4, *_link 2-3, residential 1). Each affected edge emits its own `edge:update` so the X-marker cluster appears immediately client-side.
+- Unblock path is surgical (single edge) so the marshal can reopen part of a closed segment if desired.
+- New helper `_findBlockCluster(edgeId)` is private; reads only same-class non-blocked edges so re-clicking inside a cluster never re-extends.
+
+**Shelter management (P1) — implemented end-to-end.**
+- Server: `compromised` field (default false) on every shelter; `EvacuationEngine` filters compromised shelters out of `availableShelters`. New `compromise-shelter` action toggles flag. `designate-shelter` extended to accept `{ gx, gy }` grid coords (snaps to nearest road node via new `_nearestNodeId`); auto-names "Shelter N", default capacity 1000. Both actions broadcast updated `shelters` + `snapshot` and re-run evac.
+- Client `ShelterMarker`:
+  - New `pickGroup` containing only diamond meshes for click raycasting (avoids hitting bars/stalks).
+  - `pickShelter(camera, ndcX, ndcY)` returns nodeId or null.
+  - `_applyCompromisedState(rec, bool)` greys diamond, dims bar/stalk, shows red strike ring. Called from `setUsage` (when server reports compromised) and `syncShelters` (when shelter list changes).
+  - `syncShelters(list)` adds new markers for any new shelter ids; never deletes.
+- Client `main.js _handleCanvasClick` in COMMAND mode, priority order:
+  1. Shelter diamond → `compromise-shelter` (toggle).
+  2. Road pick proxy → `block-road` (extends now).
+  3. Shift held + nothing else → terrain raycast → `designate-shelter` at nearest road node.
+- New `socket.on('shelters')` handler updates `scenario.shelters` and calls `syncShelters` so the rest of the UI sees the new shelter immediately.
+- New `worldToGrid(x, z)` inverse on `TerrainMesh`. `_terrainGridAtClick(ndcX, ndcY)` raycasts against the terrain mesh, converts world hit to terrainGroup-local, then to grid coords.
+- HUD action toasts confirm each click ("CHILD SHELTER COMPROMISED", "New shelter designated", etc.).
+- Help overlay updated with the new COMMAND-mode click semantics.
+
+**Verification.** `npm run build` clean; `node server/_selftest.js` 25/25; `node server/_e2e.js` 14/14. Existing road-block / contraflow / time-jump paths all still work; new paths additive.
+
+**Risks resolved**: fade-out particles no longer falsely look like "dots flowing through blocked path" because the cluster block closes a meaningful highway chunk — the visual stops on what the user clicked.
+
+**Risks remaining**:
+- Compromising the only shelter for a zone yields null route. Existing "⚠ NO ROUTE" hint covers it.
+- Cluster block on a primary-road grid intersection might cap at fewer than 4 if the BFS hits non-same-class neighbors first; acceptable for hackathon, tunable later.
+- Click on terrain in AR mode still works (terrainGroup local-coord transform handled), but Shift modifier on Quest controllers / hand input isn't wired — desktop-only entry path for new-shelter designation.
+
+---
+
 ## 2026-05-08 — session 18 (Tier B1: Quest 3 LAN testing setup)
 
 User asked to test on Quest 3. WebXR `immersive-ar` requires HTTPS even over LAN, so the dev server needs a cert. Setting up the simplest path: Vite-managed self-signed cert + LAN IP printer at startup.
