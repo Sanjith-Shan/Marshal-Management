@@ -163,6 +163,7 @@ class App {
     });
 
     this.socket.on('firms', (data) => this.hud.setFirms(data));
+
     this.socket.on('census', (data) => this.panels.setCensus(data));
 
     this.socket.on('sim', ({ running }) => {
@@ -330,11 +331,14 @@ class App {
     if (this.bottlenecks) this.bottlenecks.applySnapshot(snap);
     if (this.populations) this.populations.applySnapshot(snap);
 
-    // Highlight primary + secondary route edges on the road network
+    // Route invariant: every zone with a computed route shows its escape
+    // path. L3/GO zones still draw the most prominent particles via
+    // RouteAnimator; the road overlay color is the same green so blockers
+    // recompute every zone's route uniformly.
     if (this.roads && snap?.evacuation?.zones) {
       const primaryEdges = [], secondaryEdges = [];
       for (const z of snap.evacuation.zones) {
-        if (!z.route || z.level < 2) continue;
+        if (!z.route) continue;
         if (z.route.edgeIds)          primaryEdges.push(...z.route.edgeIds);
         if (z.route.secondaryEdgeIds) secondaryEdges.push(...z.route.secondaryEdgeIds);
       }

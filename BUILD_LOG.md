@@ -3,6 +3,20 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 9
+
+**Panel usability overhaul: census hookup, weather interpretation, dynamic road names.**
+
+**1. Census socket wired (`main.js`).** `socket.on('census', ...)` was missing — `CensusService` broadcast data that the client never received. One-line fix routes the event to `panels.setCensus()` → `EvacuationPanel.setCensusContext()`, which already existed and renders real ACS 2022 population numbers when a `CENSUS_API_KEY` is set.
+
+**2. `WeatherPanel` — fire behavior interpretation.** New `FIRE CONDITIONS` section below the wind vector compass computes a qualitative spread potential (LOW / MODERATE / HIGH / EXTREME) from live wind + RH values, with plain-English directives ("Rapid spread likely. Pre-position resources."). Spotting risk appears when gusts > 35 kph. Red Flag section now shows how far from threshold current conditions are ("−5% RH would trigger"). Panel title updates dynamically to reflect actual station (NWS / KSAN-MOCK). Direction field shows cardinal name alongside degrees ("300° WNW").
+
+**3. `EvacuationPanel` — road names from scenario data.** `setScenarioRoads(scenario)` inspects actual edge `hwy` types to derive labels (motorway → I-15, trunk → SR-67). Action hints and bottleneck lines use these derived names, never hardcoded strings. `PanelManager` calls it on every scenario load alongside `setHistoricalContext`.
+
+**Verification.** `npm run build` clean (608 kB). `node server/_selftest.js` PASSED. `node server/_e2e.js` PASSED.
+
+---
+
 ## 2026-05-08 — session 8
 
 **Weather → evacuation hookups closed; evacuation mode marshal UX overhaul.**

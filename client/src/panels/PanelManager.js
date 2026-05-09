@@ -51,6 +51,7 @@ export class PanelManager {
 
   setScenarioContext(scenario) {
     this.panels.evacuation.setHistoricalContext(scenario);
+    this.panels.evacuation.setScenarioRoads(scenario);
   }
 
   setCensus(census) {

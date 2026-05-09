@@ -262,19 +262,27 @@ function _evacuationHint(ev, weather) {
   if (noRoute) return `⚡ ${noRoute.name} has no route — press M → COMMAND, unblock roads or voice: "Contraflow I-15"`;
 
   const overload = ev.zones.find(z => z.bottleneck && z.bottleneck.ratio > 100);
-  if (overload) return `Route overloaded in ${overload.name} — voice: "Contraflow I-15" or click zone to cycle level`;
+  if (overload) {
+    const worstZone = ev.zones.slice().sort((a, b) => (b.bottleneck?.ratio || 0) - (a.bottleneck?.ratio || 0))[0];
+    return `Route overloaded in ${overload.name} — voice: "Contraflow I-15" or click zone to cycle level`;
+  }
 
   const critical = ev.zones.find(z => z.level < 3 && z.marginMin < 15 && z.marginMin >= 0);
   if (critical) return `⚡ ${critical.name} margin ${critical.marginMin}m — click zone or voice: "Upgrade ${critical.name} to GO"`;
 
   const windLabel = weather ? _windLabel(weather.windDeg) : '';
+  const windCardinal = weather ? ` (${_cardinal(weather.windDeg)} → ${_windLabel(weather.windDeg)})` : '';
   const redFlag = weather?.redFlag ? ' · 🚩 RED FLAG' : '';
-  return `Wind pushing fire ${windLabel}${redFlag} · Click zone to cycle level · Voice: "Block I-15", "Upgrade Poway to GO"`;
+  return `Fire moving ${windLabel}${redFlag} · Click zone to cycle level · Voice: "Upgrade [Zone] to GO"`;
 }
 
 function _windLabel(windDeg) {
-  // Convert FROM direction to TOWARD direction for "fire moving toward X"
   const toward = (windDeg + 180) % 360;
   const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return dirs[Math.round(toward / 45) % 8];
+}
+
+function _cardinal(windDeg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(windDeg / 22.5) % 16];
 }

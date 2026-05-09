@@ -3,6 +3,7 @@ import { Panel } from './Panel.js';
 export class EvacuationPanel extends Panel {
   constructor(layer, position) {
     super(layer, 'EVACUATION STATUS', position);
+    this._roads = { motorway: null, trunk: null };  // populated from scenario
     this.body.innerHTML = `
       <div id="ev-historical" style="display:none;background:rgba(255,184,107,0.06);border-left:2px solid var(--accent-warm);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.45"></div>
       <div id="ev-census" style="display:none;background:rgba(94,234,141,0.06);border-left:2px solid var(--accent-good);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.55"></div>
@@ -31,6 +32,20 @@ export class EvacuationPanel extends Panel {
       ${items}
     `;
     el.style.display = 'block';
+  }
+
+  setScenarioRoads(scenario) {
+    // Derive road labels from the actual edge types in this scenario.
+    // Motorway class → "I-15", trunk class → "SR-67" per Cedar Corridor convention.
+    // If no motorway exists, falls back to null and hints omit the road name.
+    const edges = scenario?.edges || [];
+    const hasMotorway = edges.some(e => e.hwy === 'motorway');
+    const hasTrunk    = edges.some(e => e.hwy === 'trunk');
+    this._roads = {
+      motorway: hasMotorway ? 'I-15'  : null,
+      trunk:    hasTrunk    ? 'SR-67' : null,
+      primary:  edges.some(e => e.hwy === 'primary') ? 'primary roads' : null
+    };
   }
 
   setHistoricalContext(scenario) {
@@ -75,9 +90,9 @@ export class EvacuationPanel extends Panel {
         ? z.route.destinations.slice(0, 2).map(d => `${d.name} (${d.count})`).join(', ')
         : null;
       const bn = z.bottleneck
-        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — voice: "Contraflow I-15"</div>`
+        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — voice: "Contraflow ${this._roads.motorway || 'primary route'}"</div>`
         : '';
-      const hint = zoneActionHint(z);
+      const hint = zoneActionHint(z, this._roads);
       const destLine = dests
         ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests}</div>`
         : `<div class="zone-meta" style="color:var(--accent-hot)">⚠ No route found</div>`;
@@ -122,12 +137,14 @@ function formatMin(n) {
   return `${n}m`;
 }
 
-function zoneActionHint(z) {
+function zoneActionHint(z, roads = {}) {
   const s = (cls, text) =>
     `<div style="font-size:10px;padding:3px 6px;margin-top:3px;border-radius:3px;background:${cls === 'crit' ? 'rgba(255,59,48,0.12)' : cls === 'warn' ? 'rgba(255,149,0,0.12)' : 'rgba(94,234,141,0.08)'};color:${cls === 'crit' ? 'var(--accent-hot)' : cls === 'warn' ? 'var(--accent-warm)' : 'var(--accent-good)'};letter-spacing:0.04em">${text}</div>`;
 
+  const hwy = roads.motorway || roads.trunk || 'primary route';
+
   if (!z.route) {
-    if (z.level >= 2) return s('crit', '⚡ NO ROUTE — press M → COMMAND, unblock roads or voice: "Contraflow I-15"');
+    if (z.level >= 2) return s('crit', `⚡ NO ROUTE — press M → COMMAND, unblock roads or voice: "Contraflow ${hwy}"`);
     return s('warn', '⚠ No route computed — press E to run evacuation engine');
   }
   if (z.marginMin < 0) {
@@ -137,7 +154,7 @@ function zoneActionHint(z) {
     return s('crit', `⚡ Margin critical — click zone or voice: "Upgrade ${z.name} to GO"`);
   }
   if (z.bottleneck && z.bottleneck.ratio > 100) {
-    return s('warn', `→ Route overloaded — voice: "Contraflow I-15" or "Block alternate roads"`);
+    return s('warn', `→ Route overloaded — voice: "Contraflow ${hwy}" or "Block alternate roads"`);
   }
   if (z.level < 3 && z.marginMin < 45) {
     return s('warn', `→ Margin tightening — consider upgrading to LEVEL ${z.level + 1}`);
