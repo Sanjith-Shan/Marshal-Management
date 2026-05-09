@@ -1,10 +1,11 @@
 // Shared polyline utilities for evacuation renderers.
-// route.edgeIds is a frequency-ranked subset of route edges, NOT an ordered
-// path. Two reconstruction strategies are provided:
+// route.edgeIds is an ordered Dijkstra path from population node to shelter.
+// Two reconstruction strategies are provided:
 //   bfsPolyline  — BFS from a known start node through the subgraph to a
-//                  known end node. Reliable when start/end are known.
-//   chainPolyline — greedy chain-walk from edge[0] outward. Faster but
-//                   silently drops disconnected components.
+//                  known end node. Preferred: guarantees population→shelter
+//                  direction because it walks from the explicit startNodeId.
+//   chainPolyline — greedy chain-walk from edge[0] outward. Fallback only;
+//                   direction depends on edge[0].u which may be shelter-side.
 
 /**
  * BFS through the subgraph defined by edgeIds, from startNodeId to endNodeId.

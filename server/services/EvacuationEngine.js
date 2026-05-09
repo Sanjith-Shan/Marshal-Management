@@ -171,6 +171,8 @@ export class EvacuationEngine {
           path: result.path,
           count: placed,
           dest: dest.name,
+          destNode: result.destNode,
+          startNodeId: p.nodeId,
           costMin: result.costMin,
         });
         zoneRec.totalCount += placed;
@@ -260,6 +262,8 @@ export class EvacuationEngine {
         }
         z.route = {
           edgeIds: primary,
+          startNodeId: topPaths[0].startNodeId,
+          endNodeId: topPaths[0].destNode,
           secondaryEdgeIds: secondaryEdges,
           destinations: [...route.destinations.entries()]
             .sort((a, b) => b[1] - a[1])

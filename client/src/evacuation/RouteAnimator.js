@@ -7,7 +7,7 @@
 // a solid reference even when particles are too small to see.
 
 import * as THREE from 'three';
-import { chainPolyline } from './_polyline.js';
+import { chainPolyline, bfsPolyline } from './_polyline.js';
 
 const PARTICLES_PER_ROUTE = 40;
 const SPEED = 0.25;
@@ -75,7 +75,7 @@ export class RouteAnimator {
 
     for (const z of snap.evacuation.zones) {
       if (!z.route?.edgeIds) continue;
-      const path = this._edgesToPolyline(z.route.edgeIds);
+      const path = this._edgesToPolyline(z.route.edgeIds, z.route.startNodeId, z.route.endNodeId);
       if (path.length < 2) continue;
 
       const cumLen = [0];
@@ -157,7 +157,16 @@ export class RouteAnimator {
     return line;
   }
 
-  _edgesToPolyline(edgeIds) {
+  _edgesToPolyline(edgeIds, startNodeId, endNodeId) {
+    if (startNodeId != null && endNodeId != null) {
+      const pts = bfsPolyline(
+        edgeIds, startNodeId, endNodeId,
+        this.scenario.edges, this.scenario.nodes,
+        (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
+        0.04, 4
+      );
+      if (pts && pts.length >= 2) return pts;
+    }
     return chainPolyline(
       edgeIds, this.scenario.edges, this.scenario.nodes,
       (gx, gz, h) => this.terrain.gridToWorld(gx, gz, h),
