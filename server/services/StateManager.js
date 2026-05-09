@@ -267,33 +267,11 @@ export class StateManager extends EventEmitter {
   blockRoad(edgeId, blocked = true) {
     const e = this.scenario.edges.find(e => e.id === edgeId);
     if (!e) return;
-    if (blocked) {
-      // Extend the block to adjacent same-class edges for major roads.
-      // A single OSM edge is ~500 m of road between intersections; without
-      // this, clicking I-15 closes one short segment and traffic flows
-      // around it via the next edge of I-15. We close a meaningful chunk
-      // (~3-5 edges of motorway / trunk / primary) so the demo reads as
-      // "highway closed."
-      const cluster = this._findBlockCluster(edgeId);
-      for (const id of cluster) {
-        const ce = this.scenario.edges.find(x => x.id === id);
-        if (!ce || ce.blocked) continue;
-        ce.blocked = true;
-        this.broadcast('edge:update', { id: ce.id, blocked: true, contra: ce.contra });
-      }
-    } else {
-      // Symmetric unblock — extend through any connected blocked same-class
-      // edges so a single click on any X in a previously-clustered block
-      // clears the whole highway closure (matches user expectation: "I
-      // clicked the X; the X's should disappear").
-      const cluster = this._findUnblockCluster(edgeId);
-      for (const id of cluster) {
-        const ce = this.scenario.edges.find(x => x.id === id);
-        if (!ce || !ce.blocked) continue;
-        ce.blocked = false;
-        this.broadcast('edge:update', { id: ce.id, blocked: false, contra: ce.contra });
-      }
-    }
+    // One click = one edge. Per user instruction: clicking adds a single X;
+    // re-clicking the same X removes it. The marshal closes additional
+    // segments by clicking each one explicitly.
+    e.blocked = !!blocked;
+    this.broadcast('edge:update', { id: e.id, blocked: e.blocked, contra: e.contra });
     this.evacuation.lostRoads = this.scenario.edges.filter(e => e.blocked).length;
   }
 

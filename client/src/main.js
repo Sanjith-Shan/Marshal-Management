@@ -25,7 +25,11 @@ import { HUD } from './ui/HUD.js';
 class App {
   constructor() {
     this.canvas = document.getElementById('three-canvas');
-    this.socket = socketIO({ path: '/socket.io', transports: ['websocket', 'polling'] });
+    // Polling-first: Quest browser chokes on WebSocket upgrade through Vite's
+    // HTTPS proxy with the basic-ssl cert (server logs show repeated
+    // connect/disconnect cycles otherwise). Polling works through any HTTPS
+    // proxy. socket.io will still try to upgrade to WS where it works.
+    this.socket = socketIO({ path: '/socket.io', transports: ['polling', 'websocket'] });
 
     this.scenario = null;
     this.snapshot = null;
@@ -68,19 +72,45 @@ class App {
   }
 
   _wireSocket() {
-    this.socket.on('connect', () => this.hud.setConnection(true));
-    this.socket.on('disconnect', () => this.hud.setConnection(false));
+    this.socket.on('connect', () => {
+      this.hud.setConnection(true);
+    });
+    this.socket.on('disconnect', (reason) => {
+      this.hud.setConnection(false);
+    });
+    this.socket.on('connect_error', (err) => {
+      console.warn('[socket] connect_error:', err.message);
+    });
 
     this.socket.on('scenario', (scn) => {
       console.log('[scenario] received', scn.scenarioName || scn.name, scn.nodes.length + ' nodes', scn.edges.length + ' edges');
       this.scenario = scn;
       this.caRing = [];
       this._lastCaSnapMin = -Infinity;
-      this._buildWorld();
-      if (scn.scenarioId) this.hud.setScenario(scn.scenarioId);
-      this.hud.setScenarioStart(scn.scenarioMeta);
-      this.hud.setRealDataBadge(scn);
-      this.panels.setScenarioContext(scn);
+      try {
+        this._buildWorld();
+        // World is ready — unlock the XR button so the user can enter AR.
+        // Do this only after a successful build; if _buildWorld threw we
+        // leave the button disabled rather than entering AR into a half-
+        // built scene.
+        const xrBtn = document.getElementById('btn-xr');
+        if (xrBtn && !xrBtn.classList.contains('unsupported')) {
+          xrBtn.classList.remove('disabled');
+          xrBtn.title = 'Enter immersive AR (Quest 3, requires user gesture)';
+        }
+      } catch (err) {
+        const msg = `_buildWorld failed: ${err?.message || err}\n${err?.stack || ''}`;
+        console.error(msg);
+        if (typeof window.__qlog === 'function') window.__qlog(msg);
+      }
+      try {
+        if (scn.scenarioId) this.hud.setScenario(scn.scenarioId);
+        this.hud.setScenarioStart(scn.scenarioMeta);
+        this.hud.setRealDataBadge(scn);
+        this.panels.setScenarioContext(scn);
+      } catch (err) {
+        if (typeof window.__qlog === 'function') window.__qlog('post-build setup failed: ' + err.message);
+      }
     });
 
     this.socket.on('snapshot', (snap) => {
@@ -216,14 +246,24 @@ class App {
   }
 
   _wireUI() {
-    document.getElementById('btn-xr').addEventListener('click', () => this.ar.enter());
+    // XR button starts disabled — only enable once the world is built so a
+    // user can't enter AR into an empty scene during the 1–3 s build window.
+    const xrBtn = document.getElementById('btn-xr');
+    xrBtn.classList.add('disabled');
+    xrBtn.title = 'Loading scenario — Enter AR will activate when ready';
+    xrBtn.addEventListener('click', () => {
+      if (xrBtn.classList.contains('disabled')) return;
+      this.ar.enter();
+    });
     this.ar.on('enter', () => {
-      document.getElementById('btn-xr').textContent = 'Exit AR';
-      document.getElementById('btn-xr').classList.add('active');
+      const span = xrBtn.querySelector('span:last-child');
+      if (span) span.textContent = 'Exit AR'; else xrBtn.textContent = 'Exit AR';
+      xrBtn.classList.add('active');
     });
     this.ar.on('exit', () => {
-      document.getElementById('btn-xr').textContent = 'Enter AR';
-      document.getElementById('btn-xr').classList.remove('active');
+      const span = xrBtn.querySelector('span:last-child');
+      if (span) span.textContent = 'Enter AR'; else xrBtn.textContent = 'Enter AR';
+      xrBtn.classList.remove('active');
     });
 
     this.canvas.addEventListener('click', (ev) => this._handleCanvasClick(ev));
@@ -429,6 +469,11 @@ class App {
   }
 
   _handleCanvasClick(ev) {
+    // In AR, the desktop perspective camera isn't the rendering camera —
+    // mouse-click raycasts would hit the wrong geometry. Disable mouse
+    // interaction in AR (desktop user can drive input through a separate
+    // browser tab if needed; hand tracking is BUILD_LOG Tier B5).
+    if (this.ar.active) return;
     if (this.desktop.hasDragged) return;
     if (!this.snapshot) return;
     const mode = this.snapshot.mode;
@@ -524,7 +569,10 @@ class App {
 
   _frame(t) {
     const dt = this.scene.clock.getDelta();
-    this.desktop.update(dt);
+    // In AR, three.js drives the camera from the headset pose — running
+    // DesktopControls would mutate the (now-unused) perspective camera
+    // and create a jolt when exiting AR. Skip it.
+    if (!this.ar.active) this.desktop.update(dt);
 
     if (this.fireCA && !this.ar.active) {
       this.fireCA.step(dt, this.scene.camera);

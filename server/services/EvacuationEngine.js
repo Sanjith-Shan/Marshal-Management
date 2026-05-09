@@ -113,76 +113,117 @@ export class EvacuationEngine {
   async runFullEvacuation() {
     const { populations, shelters, edges } = this.state.scenario;
     const adj = this.buildGraph();
-    // Compromised shelters (user-marked unavailable in COMMAND mode) are
-    // excluded from routing. They stay in the shelters list per UX
-    // instruction — only their availability flips.
-    const shelterIds = new Set(shelters.filter(s => !s.compromised).map(s => s.nodeId));
     const congestion = new Map();    // edgeId -> assigned vehicles in headway window
     const edgeFlow = new Map();
     const shelterUsed = new Map(shelters.map(s => [s.nodeId, 0]));
 
-    // Sort demand high-to-low so larger pops route first (fills capacity first).
-    const demand = [...populations].sort((a, b) => b.count - a.count);
+    // Group populations by zone so each zone fills its CLOSEST shelter first
+    // before overflowing — avoids the multi-zone scramble that lets a single
+    // mega-shelter (Qualcomm) absorb everyone.
+    const popsByZone = new Map();
+    for (const p of populations) {
+      if (!popsByZone.has(p.zone)) popsByZone.set(p.zone, []);
+      popsByZone.get(p.zone).push(p);
+    }
 
-    const zoneRoutes = new Map();    // zoneName -> {primary: [edgeIds], pops, costMin}
+    // Process zones by closest-shelter affinity (cheapest-cost-to-any-shelter
+    // first). Zones with the strongest local match secure their preferred
+    // shelter before farther zones bid on it. Falls back to total-population
+    // tiebreak if costs are equal (shouldn't happen on real graphs).
+    const allShelterIds = new Set(shelters.filter(s => !s.compromised).map(s => s.nodeId));
+    const zoneOrder = [...popsByZone.entries()]
+      .map(([name, pops]) => {
+        const sortedPops = pops.slice().sort((a, b) => b.count - a.count);
+        const repNode = sortedPops[0].nodeId;
+        const r = this.shortestToShelter(adj, repNode, allShelterIds, congestion);
+        return {
+          name,
+          pops,
+          total: pops.reduce((a, p) => a + p.count, 0),
+          closestCost: r ? r.costMin : Infinity,
+        };
+      })
+      .sort((a, b) => a.closestCost - b.closestCost || b.total - a.total);
+
+    const zoneRoutes = new Map();    // zoneName -> {paths, totalCount, costMin, destinations}
     let routedPeople = 0;
 
-    for (const p of demand) {
-      // A single population may need to split across multiple shelters if the
-      // nearest one fills up. Loop until all of p.count is placed (or no shelter
-      // is reachable).
-      let remaining = p.count;
-      let safety = 6;     // at most 6 splits per population, prevents infinite loops
-      while (remaining > 0 && safety-- > 0) {
-        const availableShelters = new Set(
-          [...shelterIds].filter(id => {
-            const used = shelterUsed.get(id) || 0;
-            const cap = shelters.find(s => s.nodeId === id).capacity;
-            return used < cap;
-          })
-        );
-        if (availableShelters.size === 0) break;
+    for (const zone of zoneOrder) {
+      // Sort this zone's populations biggest first (largest blocks of people
+      // claim closest-shelter slots before tail nodes scrape up overflow).
+      const zonePops = zone.pops.slice().sort((a, b) => b.count - a.count);
+      // Use the zone's biggest population node as the representative for
+      // shelter ranking — they're geographically clustered, so all zone pops
+      // share the same shelter preference order.
+      const repNode = zonePops[0].nodeId;
 
-        const result = this.shortestToShelter(adj, p.nodeId, availableShelters, congestion);
-        if (!result) break;
+      for (const p of zonePops) {
+        let remaining = p.count;
+        let safety = 6;
+        while (remaining > 0 && safety-- > 0) {
+          // Re-rank shelters every iteration: a shelter that filled mid-loop
+          // gets dropped; the next-closest non-full non-compromised wins.
+          const availableShelters = new Set(
+            shelters
+              .filter(s => !s.compromised)
+              .filter(s => (shelterUsed.get(s.nodeId) || 0) < s.capacity)
+              .map(s => s.nodeId)
+          );
+          if (availableShelters.size === 0) break;
 
-        const dest = shelters.find(s => s.nodeId === result.destNode);
-        const slot = Math.max(0, dest.capacity - (shelterUsed.get(result.destNode) || 0));
-        const placed = Math.min(remaining, slot);
-        if (placed === 0) {
-          // Mark this shelter as full and try again
-          shelterUsed.set(result.destNode, dest.capacity);
-          continue;
+          // Multi-target Dijkstra from THIS zone's representative node
+          // determines the closest available shelter for the whole zone.
+          // Then we route this specific population to that same shelter so
+          // every member of the zone visually lands on the same destination.
+          const repResult = this.shortestToShelter(adj, repNode, availableShelters, congestion);
+          if (!repResult) break;
+          const targetShelter = repResult.destNode;
+
+          // Now compute the actual path from THIS population node to that
+          // chosen shelter (different pop nodes in the zone take slightly
+          // different paths to converge on the same destination).
+          const result = this.shortestToShelter(adj, p.nodeId, new Set([targetShelter]), congestion);
+          if (!result) {
+            // Pop isolated from chosen shelter — try the next-best by
+            // marking this one full for THIS pop only.
+            shelterUsed.set(targetShelter, shelters.find(s => s.nodeId === targetShelter).capacity);
+            continue;
+          }
+
+          const dest = shelters.find(s => s.nodeId === result.destNode);
+          const slot = Math.max(0, dest.capacity - (shelterUsed.get(result.destNode) || 0));
+          const placed = Math.min(remaining, slot);
+          if (placed === 0) {
+            shelterUsed.set(result.destNode, dest.capacity);
+            continue;
+          }
+
+          const vehicles = placed * VEH_PER_PERSON;
+          for (const eid of result.path) {
+            congestion.set(eid, (congestion.get(eid) || 0) + vehicles);
+            edgeFlow.set(eid, (edgeFlow.get(eid) || 0) + vehicles);
+          }
+          shelterUsed.set(result.destNode, (shelterUsed.get(result.destNode) || 0) + placed);
+          routedPeople += placed;
+          remaining -= placed;
+
+          const zoneRec = zoneRoutes.get(p.zone) || {
+            paths: [], totalCount: 0, costMin: 0, destinations: new Map()
+          };
+          zoneRec.paths.push({
+            path: result.path,
+            count: placed,
+            dest: dest.name,
+            destNode: result.destNode,
+            startNodeId: p.nodeId,
+            costMin: result.costMin,
+          });
+          zoneRec.totalCount += placed;
+          zoneRec.costMin = Math.max(zoneRec.costMin, result.costMin);
+          zoneRec.destinations.set(dest.name,
+            (zoneRec.destinations.get(dest.name) || 0) + placed);
+          zoneRoutes.set(p.zone, zoneRec);
         }
-
-        const vehicles = placed * VEH_PER_PERSON;
-        for (const eid of result.path) {
-          congestion.set(eid, (congestion.get(eid) || 0) + vehicles);
-          edgeFlow.set(eid, (edgeFlow.get(eid) || 0) + vehicles);
-        }
-        shelterUsed.set(result.destNode, (shelterUsed.get(result.destNode) || 0) + placed);
-        routedPeople += placed;
-        remaining -= placed;
-
-        const zoneRec = zoneRoutes.get(p.zone) || {
-          paths: [], totalCount: 0, costMin: 0, destinations: new Map()
-        };
-        // Store the actual ordered Dijkstra path of this routing decision
-        // so the client renders a connected polyline from population to
-        // shelter (no gaps from frequency-aggregation across disjoint paths).
-        zoneRec.paths.push({
-          path: result.path,
-          count: placed,
-          dest: dest.name,
-          destNode: result.destNode,
-          startNodeId: p.nodeId,
-          costMin: result.costMin,
-        });
-        zoneRec.totalCount += placed;
-        zoneRec.costMin = Math.max(zoneRec.costMin, result.costMin);
-        zoneRec.destinations.set(dest.name,
-          (zoneRec.destinations.get(dest.name) || 0) + placed);
-        zoneRoutes.set(p.zone, zoneRec);
       }
     }
 

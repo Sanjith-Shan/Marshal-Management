@@ -122,6 +122,9 @@ html, body, #app {
   transition: all 0.15s ease;
 }
 .hud-btn:hover { background: var(--glass-strong); border-color: var(--accent); }
+.hud-btn.disabled { opacity: 0.45; cursor: not-allowed; pointer-events: auto; }
+.hud-btn.disabled:hover { background: var(--glass); border-color: var(--glass-border); }
+.hud-btn.active { background: rgba(108, 207, 255, 0.22); border-color: var(--accent); }
 .hud-btn-key {
   background: rgba(108, 207, 255, 0.18);
   color: var(--accent);

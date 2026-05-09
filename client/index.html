@@ -24,7 +24,7 @@
           var r = e.reason;
           show('PROMISE: ' + (r && r.message ? r.message : String(r)) + (r && r.stack ? '\n' + r.stack : ''));
         });
-        window.__qlog = function (s) { show('LOG: ' + s); };
+        window.__qlog = function (s) { console.log('[qlog]', s); };
       })();
     </script>
   </head>
