@@ -73,18 +73,23 @@ export class EvacuationPanel extends Panel {
       const lvlText = z.level === 3 ? 'LEVEL 3 GO' : z.level === 2 ? 'LEVEL 2 SET' : 'LEVEL 1 READY';
       const dests = z.route?.destinations
         ? z.route.destinations.slice(0, 2).map(d => `${d.name} (${d.count})`).join(', ')
-        : '—';
+        : null;
       const bn = z.bottleneck
-        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck on edge ${z.bottleneck.edgeId} · ${z.bottleneck.ratio}% cap</div>`
+        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — voice: "Contraflow I-15"</div>`
         : '';
+      const hint = zoneActionHint(z);
+      const destLine = dests
+        ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests}</div>`
+        : `<div class="zone-meta" style="color:var(--accent-hot)">⚠ No route found</div>`;
       return `<div class="zone-row l${z.level}">
         <div class="zone-name">
           <span>${z.name}</span>
           <span class="zone-level l${z.level}">${lvlText}</span>
         </div>
         <div class="zone-meta">Fire ETA ${formatMin(z.etaMin)} · Evac ${formatMin(z.evacMin)} · Margin ${formatMin(z.marginMin)}</div>
-        <div class="zone-meta">Routes: ${dests}</div>
+        ${destLine}
         ${bn}
+        ${hint}
         <div class="progress"><div class="progress-fill" style="width:${z.evacuatedPct || 0}%"></div></div>
       </div>`;
     }).join('');
@@ -115,4 +120,30 @@ function formatMin(n) {
   if (n >= 999) return '—';
   if (n < 0) return `<span style="color:var(--accent-hot)">${n}m</span>`;
   return `${n}m`;
+}
+
+function zoneActionHint(z) {
+  const s = (cls, text) =>
+    `<div style="font-size:10px;padding:3px 6px;margin-top:3px;border-radius:3px;background:${cls === 'crit' ? 'rgba(255,59,48,0.12)' : cls === 'warn' ? 'rgba(255,149,0,0.12)' : 'rgba(94,234,141,0.08)'};color:${cls === 'crit' ? 'var(--accent-hot)' : cls === 'warn' ? 'var(--accent-warm)' : 'var(--accent-good)'};letter-spacing:0.04em">${text}</div>`;
+
+  if (!z.route) {
+    if (z.level >= 2) return s('crit', '⚡ NO ROUTE — press M → COMMAND, unblock roads or voice: "Contraflow I-15"');
+    return s('warn', '⚠ No route computed — press E to run evacuation engine');
+  }
+  if (z.marginMin < 0) {
+    return s('crit', '⚡ Fire arrival imminent — maximize contraflow, push remaining evacuees now');
+  }
+  if (z.marginMin < 15 && z.level < 3) {
+    return s('crit', `⚡ Margin critical — click zone or voice: "Upgrade ${z.name} to GO"`);
+  }
+  if (z.bottleneck && z.bottleneck.ratio > 100) {
+    return s('warn', `→ Route overloaded — voice: "Contraflow I-15" or "Block alternate roads"`);
+  }
+  if (z.level < 3 && z.marginMin < 45) {
+    return s('warn', `→ Margin tightening — consider upgrading to LEVEL ${z.level + 1}`);
+  }
+  if (z.level === 3 && (z.evacuatedPct || 0) > 80) {
+    return s('ok', `✓ ${z.evacuatedPct}% clear — monitor for stragglers`);
+  }
+  return '';
 }

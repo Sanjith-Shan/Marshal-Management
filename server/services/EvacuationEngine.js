@@ -26,6 +26,16 @@ export class EvacuationEngine {
     for (const n of nodes) adj.set(n.id, []);
     const fireArrival = this.state.fireArrivalByNode || new Map();
     const now = this.state.simTimeMin;
+
+    // Wind penalty: nudge the router away from roads aligned with the fire
+    // spread direction. Uses the same convention as CellularAutomata:
+    // windDeg is FROM direction; fire spreads TOWARD (windDeg+180).
+    const weather = this.state.weather;
+    const towardRad = ((weather.windDeg + 180) % 360) * Math.PI / 180;
+    const windX = Math.sin(towardRad);
+    const windZ = -Math.cos(towardRad);    // matches CA wy convention
+    const useWindPenalty = weather.windKph > 20;
+
     for (const e of edges) {
       if (e.blocked) continue;
       const fa = Math.min(
@@ -36,14 +46,23 @@ export class EvacuationEngine {
       // edges where fire has already arrived at the current server sim clock.
       if (Number.isFinite(fa) && fa - now <= 0) continue;
       const length = this.edgeLength(e);
-      const baseTimeMin = (length / 1000) / (e.speed / 60);
+      const baseTime = (length / 1000) / (e.speed / 60);
       const capacity = e.contra ? e.capacity * 1.8 : e.capacity;
-      const edgeRec = {
-        id: e.id, to: e.v, baseTimeMin, capacity,
-        length, fa, hwy: e.hwy
-      };
-      adj.get(e.u).push({ ...edgeRec });
-      adj.get(e.v).push({ ...edgeRec, to: e.u });
+
+      // Per-direction wind penalty: going downwind (+align) costs up to 25%
+      // more time so Dijkstra naturally prefers crosswind/upwind routes.
+      let penaltyUV = 1, penaltyVU = 1;
+      if (useWindPenalty) {
+        const A = nodes[e.u], B = nodes[e.v];
+        const dx = B.x - A.x, dz = B.z - A.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const alignUV = (dx * windX + dz * windZ) / len;
+        penaltyUV = 1 + 0.25 * Math.max(0,  alignUV);
+        penaltyVU = 1 + 0.25 * Math.max(0, -alignUV);
+      }
+
+      adj.get(e.u).push({ id: e.id, to: e.v, baseTimeMin: baseTime * penaltyUV, capacity, length, fa, hwy: e.hwy });
+      adj.get(e.v).push({ id: e.id, to: e.u, baseTimeMin: baseTime * penaltyVU, capacity, length, fa, hwy: e.hwy });
     }
     return adj;
   }

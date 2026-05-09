@@ -22,6 +22,7 @@ export class AIAdvisor {
     this.client = null;
     this.model = null;
     this.history = [];
+    this._redFlagAlerted = false;   // emit at most once per Red Flag event
     if (process.env.OPENAI_API_KEY && process.env.MM_FORCE_MOCK !== '1') {
       try {
         this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -218,8 +219,31 @@ export class AIAdvisor {
   async proactiveScan() {
     const s = this.state;
     const issues = [];
+
+    // Red Flag conditions: emit once per event (reset when flag clears).
+    if (s.weather.redFlag) {
+      if (!this._redFlagAlerted) {
+        this._redFlagAlerted = true;
+        issues.push({
+          severity: 'warn',
+          source: 'proactive',
+          text: `RED FLAG conditions active — wind ${Math.round(s.weather.windKph)} kph from ${Math.round(s.weather.windDeg)}°, RH ${Math.round(s.weather.humidity)}%. Fire spread will be rapid and unpredictable. Recommend preemptive zone upgrades and contraflow on primary evacuation routes.`
+        });
+      }
+    } else {
+      this._redFlagAlerted = false;
+    }
+
+    // Zone-level issues (higher priority, may override Red Flag in sort).
     for (const z of s.evacuation.zones) {
-      if (z.level === 3 && (z.evacuatedPct || 0) < 50 && z.etaMin <= 30) {
+      if (!z.route && z.level >= 2) {
+        issues.push({
+          severity: 'crit',
+          source: 'proactive',
+          zoneName: z.name,
+          text: `${z.name} has NO evacuation route — all roads blocked or burned. Switch to COMMAND mode and open alternate roads or enable contraflow immediately.`
+        });
+      } else if (z.level === 3 && (z.evacuatedPct || 0) < 50 && z.etaMin <= 30) {
         issues.push({
           severity: 'crit',
           source: 'proactive',

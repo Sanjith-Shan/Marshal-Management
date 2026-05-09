@@ -3,6 +3,28 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 8
+
+**Weather → evacuation hookups closed; evacuation mode marshal UX overhaul.**
+
+**1. Wind penalty in `EvacuationEngine.buildGraph()`.** Dijkstra now applies a per-direction cost multiplier (up to ×1.25) on edges aligned with the fire spread direction (downwind). Uses same `windDeg` + 180° convention as `CellularAutomata`. Active when wind > 20 kph; bidirectional — u→v and v→u receive independent penalties. Effect: router naturally prefers crosswind/upwind roads as secondary routes without overriding fire-arrival blocking.
+
+**2. Red Flag proactive alert in `AIAdvisor.proactiveScan()`.** When `state.weather.redFlag` is true, the advisor emits a `warn`-severity advisory citing live wind/RH values. Guarded by `_redFlagAlerted` flag so it fires exactly once per Red Flag event, not every 60-second scan. Resets when flag clears.
+
+**3. `EvacuationPanel` marshal-facing action hints.** Every zone row now shows a context-sensitive directive below the metrics:
+- No route → `⚡ NO ROUTE — press M → COMMAND, unblock roads or voice: "Contraflow I-15"` (red)
+- Fire imminent (margin < 0) → `⚡ Fire arrival imminent — maximize contraflow` (red)
+- Margin critical & not at L3 → `⚡ Margin critical — click zone or voice: "Upgrade X to GO"` (red)
+- Route overloaded → `→ Route overloaded — voice: "Contraflow I-15"` (amber)
+- Margin tightening → `→ Consider upgrading to LEVEL N` (amber)
+- High % evacuated → `✓ 80%+ clear — monitor for stragglers` (green)
+
+**4. Dynamic evac banner hint in `HUD.js` + `index.html`.** The static hint line is now `id="evac-banner-hint"` and rewritten by `updateEvacBanner()` on every evacuation update. Priority order: no-route alert → overloaded route → critical margin upgrade → wind direction label + Red Flag badge. Example: `Wind pushing fire NE · 🚩 RED FLAG · Click zone to cycle level`.
+
+**Verification.** `npm run build` clean (605 kB, 159 kB gzipped). `node server/_selftest.js` PASSED. `node server/_e2e.js` PASSED.
+
+---
+
 ## 2026-05-08 — session 7
 
 **User-reported pain points fixed + real Census data wired.**
