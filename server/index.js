@@ -12,6 +12,7 @@ import { WeatherService } from './services/WeatherService.js';
 import { AIAdvisor } from './services/AIAdvisor.js';
 import { ArduinoService } from './services/ArduinoService.js';
 import { FIRMSService } from './services/FIRMSService.js';
+import { CensusService } from './services/CensusService.js';
 import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
@@ -40,6 +41,7 @@ const weather = new WeatherService();
 const ai = new AIAdvisor(state, weather);
 const arduino = new ArduinoService();
 const firms = new FIRMSService();
+const census = new CensusService();
 
 state.attachIO(io);
 
@@ -283,6 +285,13 @@ firms.start();
 firms.on('update', (data) => {
   state.firms = data;
   state.broadcast('firms', data);
+});
+
+// US Census Bureau — real ACS 2022 community populations
+census.start();
+census.on('update', (data) => {
+  state.census = data;
+  state.broadcast('census', data);
 });
 
 // Proactive AI: every 60 sec analyze the scene. Big sim-time jumps also kick

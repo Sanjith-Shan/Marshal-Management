@@ -5,6 +5,7 @@ export class EvacuationPanel extends Panel {
     super(layer, 'EVACUATION STATUS', position);
     this.body.innerHTML = `
       <div id="ev-historical" style="display:none;background:rgba(255,184,107,0.06);border-left:2px solid var(--accent-warm);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.45"></div>
+      <div id="ev-census" style="display:none;background:rgba(94,234,141,0.06);border-left:2px solid var(--accent-good);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.55"></div>
       <div id="ev-overview" class="metric-grid"></div>
       <h3>ZONES</h3>
       <div id="ev-zones"></div>
@@ -14,6 +15,24 @@ export class EvacuationPanel extends Panel {
       <div id="ev-bot" style="font-size:11px;color:var(--text-dim)">—</div>
     `;
   }
+  setCensusContext(census) {
+    if (!census?.available || !census.populations) return;
+    const el = this.body.querySelector('#ev-census');
+    if (!el) return;
+    const order = ['sanDiegoCounty', 'sanDiegoCity', 'poway', 'escondido'];
+    const items = order
+      .filter(k => census.populations[k])
+      .map(k => `<div style="display:flex;justify-content:space-between"><span>${census.populations[k].label}</span><span style="color:var(--accent-good)">${census.populations[k].population.toLocaleString()}</span></div>`)
+      .join('');
+    el.innerHTML = `
+      <div style="font-weight:700;letter-spacing:0.08em;color:var(--accent-good);margin-bottom:4px">
+        REAL POPULATION (US Census ACS 2022)
+      </div>
+      ${items}
+    `;
+    el.style.display = 'block';
+  }
+
   setHistoricalContext(scenario) {
     const el = this.body.querySelector('#ev-historical');
     if (!el) return;

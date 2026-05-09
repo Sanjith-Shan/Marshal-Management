@@ -53,6 +53,10 @@ export class PanelManager {
     this.panels.evacuation.setHistoricalContext(scenario);
   }
 
+  setCensus(census) {
+    this.panels.evacuation.setCensusContext(census);
+  }
+
   updateWeather(w) { this.panels.weather.update(w); }
   updateEvacuation(ev) { this.panels.evacuation.update(ev); }
 

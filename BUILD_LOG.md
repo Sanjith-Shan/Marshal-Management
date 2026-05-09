@@ -3,6 +3,27 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 7
+
+**User-reported pain points fixed + real Census data wired.**
+
+**Time display + cadence (user request).** Server tick now 2000ms / += 1 sim-min (was 1000ms / += 0.5). HUD displays `HH:MM` 24-hour military time anchored to `scenario.scenarioMeta.ignitionTime` (Cedar 2003: 17:37, Witch 2007: 12:35). Each visible tick is a clean integer-minute step lasting 2 wall-seconds; fixes "T+00:30 each time, going too fast."
+
+**Pause/resume.** New `sim:toggle` action. `StateManager.toggleSim()` flips `simRunning` and broadcasts `sim` event. `CellularAutomata.setPaused()` gates `step()` so the fire freezes too. HUD pause button + `P` keybinding. `snapshot.simRunning` so late joiners pick up state.
+
+**Blocker unselect bug.** Client `edge:update` handler now syncs `this.scenario.edges[i].blocked` and `.contra` so re-clicking a blocked road actually unblocks instead of re-blocking. The X marker comes off as expected.
+
+**EVACUATE mode value.** Was visually distinct but unclear what the user could DO. Now:
+- Top-screen banner appears in EVACUATE mode showing live aggregate stats: total residents, % evacuated, critical zone + margin (color-coded: red if margin < 0, orange if < 15), bottleneck count. Updates on snapshot/evacuation events.
+- **Click any zone polygon to cycle level** (READY → SET → GO → READY). `ZoneRenderer.pickZone` raycasts against zone meshes; `_handleCanvasClick` routes by mode (COMMAND → roads, EVACUATE → zones).
+- Hint line on the banner reminds the user what they can do.
+
+**Real US Census data (using user-provided key).** New `server/services/CensusService.js` queries ACS 2022 5-year tables on startup for County + 4 places. Successfully retrieved live: San Diego County 3,289,701; San Diego City 1,383,987; Poway 48,737; Escondido 61,942. Some CDP codes (Ramona, Lakeside, Scripps Ranch) aren't queryable at place granularity in ACS 2022 — dropped to incorporated cities only. EvacuationPanel renders real numbers in a green-banded "REAL POPULATION (US Census ACS 2022)" section above scenario stats; AI advisor also gets these in context for grounding.
+
+**Gates.** `npm run build` clean. `node server/_selftest.js` 25/25. `node server/_e2e.js` 14/14. Live API roundtrips: OpenAI ~2.5 s, FIRMS ~0.4 s, Census ~2.6 s.
+
+---
+
 ## 2026-05-08 — session 6
 
 **Gemini → OpenAI swap, live NASA FIRMS feed, historical Cedar Fire metadata.** Single batch, gates green.

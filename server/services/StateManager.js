@@ -50,6 +50,7 @@ export class StateManager extends EventEmitter {
     this.ptt = false;
     this.timelineMin = 0;
     this.firms = { available: false, count: 0, hotspots: [] };
+    this.census = { available: false, populations: {} };
 
     // Snapshot ring for time-jump rewind (TODO group H3). Pushed every
     // SNAPSHOT_INTERVAL_MIN simulated minutes via tickSimulation; bounded to
@@ -114,6 +115,7 @@ export class StateManager extends EventEmitter {
       ptt: this.ptt,
       timelineMin: this.timelineMin,
       firms: this.firms,
+      census: this.census,
       edgeBlockedIds: this.scenario.edges.filter(e => e.blocked).map(e => e.id),
       edgeContraflowIds: this.scenario.edges.filter(e => e.contra).map(e => e.id)
     };

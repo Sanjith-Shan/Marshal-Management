@@ -85,6 +85,7 @@ class App {
       this._applyEvacuationToScene(snap);
       if (this.fireCA && snap.weather) this.fireCA.setWind(snap.weather.windDeg, snap.weather.windKph);
       if (snap.firms) this.hud.setFirms(snap.firms);
+      if (snap.census) this.panels.setCensus(snap.census);
       if (snap.simRunning != null) {
         this.hud.setSimRunning(snap.simRunning);
         if (this.fireCA) this.fireCA.setPaused(!snap.simRunning);
@@ -162,6 +163,7 @@ class App {
     });
 
     this.socket.on('firms', (data) => this.hud.setFirms(data));
+    this.socket.on('census', (data) => this.panels.setCensus(data));
 
     this.socket.on('sim', ({ running }) => {
       this.hud.setSimRunning(running);

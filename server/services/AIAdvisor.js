@@ -145,6 +145,19 @@ export class AIAdvisor {
         .map(b => `edge ${b.edgeId} (${Math.round(b.ratio * 100)}% cap)`).join(', ');
       lines.push(`- Top bottlenecks: ${top}`);
     }
+    // Real-world context: ACS 2022 5-year population reference
+    if (s.census?.available && s.census.populations) {
+      const pops = s.census.populations;
+      const refs = ['sanDiegoCounty', 'sanDiegoCity', 'poway', 'escondido']
+        .filter(k => pops[k])
+        .map(k => `${pops[k].label} ${pops[k].population.toLocaleString()}`);
+      if (refs.length) {
+        lines.push(``);
+        lines.push(`REAL-WORLD POPULATION REFERENCE (US Census ACS 2022):`);
+        lines.push(`- ${refs.join(' · ')}`);
+        lines.push(`- Synthetic scenario population (${s.evacuation.totalPopulation.toLocaleString()}) is scaled down for routing-engine performance.`);
+      }
+    }
     // Real-world context: live NASA FIRMS California wildfire hotspots
     if (s.firms?.available && s.firms.count > 0) {
       lines.push(``);
