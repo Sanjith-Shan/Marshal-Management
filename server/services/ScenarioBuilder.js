@@ -11,14 +11,18 @@ const GRID = 128;          // CA grid resolution
 const WORLD_M = 24_000;    // 24 km world span (scene-units anchor; not real meters)
 const M_PER_CELL = WORLD_M / GRID;
 
-// Real-world bounding box: Cedar Corridor, San Diego County. Contains
-// Scripps Ranch, Poway, Ramona, Cedar Creek ignition (33.0356, -116.7),
-// AND Qualcomm Stadium (32.7831, -117.1196) — the actual 2003 Cedar Fire
-// emergency shelter that housed ~10,000 evacuees.
+// Real-world bounding box: extended Cedar Corridor / west San Diego.
+// Reaches the Pacific coast in the west (UCSD / La Jolla / Mission Beach),
+// north toward Encinitas, south toward Imperial Beach / Chula Vista, and
+// east into Cleveland NF past Cedar Creek. Contains all original demo
+// targets (Scripps Ranch, Poway, Ramona, Qualcomm Stadium, Cedar Creek
+// ignition at 33.0356, -116.7) and a much richer real-world surround
+// for the visual demo.
+//
 // All real lat/lng inputs are projected into the 128×128 grid via this bbox.
 export const BBOX = {
-  latMin: 32.75, latMax: 33.10,        // ~38.8 km tall (lat: 111 km/°)
-  lngMin: -117.15, lngMax: -116.65,    // ~46.6 km wide at 33°N (lng: 93 km/°)
+  latMin: 32.62, latMax: 33.22,        // ~66.6 km tall (lat: 111 km/°)
+  lngMin: -117.32, lngMax: -116.55,    // ~71.6 km wide at 33°N (lng: 93 km/°)
 };
 const BBOX_WIDTH_M = (BBOX.lngMax - BBOX.lngMin) * 93_000;
 const BBOX_HEIGHT_M = (BBOX.latMax - BBOX.latMin) * 111_000;

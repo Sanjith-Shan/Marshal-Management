@@ -118,10 +118,21 @@ export class RoadRenderer {
   }
 
   _buildPickProxy() {
-    // Invisible thicker mesh per edge for raycaster picking.
+    // Invisible thicker mesh per edge for raycaster picking. Only major
+    // road classes get pick targets — at SD-county scale (~48k OSM edges)
+    // a per-edge raycast against secondary/tertiary roads is too slow on
+    // every mousemove. Marshal-relevant blocks are highways and primary
+    // arterials; finer streets aren't typically named-blockable anyway.
+    const PICKABLE_HWY = new Set([
+      'motorway', 'motorway_link',
+      'trunk', 'trunk_link',
+      'primary', 'primary_link',
+    ]);
     this._pickGroup = new THREE.Group();
-    this._pickGroup.visible = true;     // raycaster ignores material visibility but we want children intersectable
+    this._pickGroup.visible = true;
+    let kept = 0;
     for (const e of this.scenario.edges) {
+      if (!PICKABLE_HWY.has(e.hwy)) continue;
       const A = this.scenario.nodes[e.u];
       const B = this.scenario.nodes[e.v];
       const pA = this.terrain.gridToWorld(A.x, A.z, ROAD_LIFT + 0.01);
@@ -141,8 +152,12 @@ export class RoadRenderer {
       mesh.lookAt(pB);
       mesh.userData.edgeId = e.id;
       this._pickGroup.add(mesh);
+      kept++;
     }
     this.group.add(this._pickGroup);
+    if (typeof console !== 'undefined') {
+      console.log(`[roads] pick proxy: ${kept} major-class edges (skipped ${this.scenario.edges.length - kept} secondary/tertiary)`);
+    }
   }
 
   setRoutePrimary(edgeIds, secondaryEdgeIds = []) {
