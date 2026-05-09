@@ -47,24 +47,40 @@ export class ARSession extends EventEmitter {
       return;
     }
     try {
-      const session = await navigator.xr.requestSession('immersive-ar', {
+      // dom-overlay puts the HUD/panels on top of the AR scene so the
+      // marshal can still read modes, scenarios, and advisor messages
+      // while in immersive passthrough. Without it, the entire DOM is
+      // hidden during the XR session and the user sees only the WebGL
+      // scene + passthrough.
+      const sessionInit = {
         requiredFeatures: ['local-floor'],
-        optionalFeatures: ['hit-test', 'plane-detection', 'hand-tracking', 'anchors']
-      });
+        optionalFeatures: ['hit-test', 'plane-detection', 'hand-tracking', 'anchors', 'dom-overlay'],
+        domOverlay: { root: document.body }
+      };
+      console.log('[ar] requesting immersive-ar with dom-overlay');
+      const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
       this.session = session;
       this.sceneRoot.renderer.xr.setReferenceSpaceType('local-floor');
       await this.sceneRoot.renderer.xr.setSession(session);
       this.active = true;
       this.emit('enter');
 
-      // Hide table & grid in AR (use real world)
+      // Hide desktop-only props + force the renderer to clear with full
+      // transparency so the AR compositor shows passthrough where the
+      // scene has no geometry (otherwise the compositor sees an opaque
+      // black canvas and the user gets the "everything is black" bug).
       this.sceneRoot.table.visible = false;
       this.sceneRoot.scene.background = null;
       this.sceneRoot.scene.fog = null;
+      this.sceneRoot.renderer.setClearColor(0x000000, 0);
 
-      // Place terrain ~1 m in front of viewer at floor height
-      this.sceneRoot.terrainGroup.position.set(0, 0.05, -1.2);
-      this.sceneRoot.terrainGroup.scale.setScalar(0.6);   // tabletop scale
+      // Anchor the terrain at "tabletop" height — 1.0 m above the floor,
+      // 0.7 m in front of the user's start position. Standing user looks
+      // down ~30° to see it; can crouch / sit / walk around it. Scale
+      // 0.35 makes the 11-unit-wide TerrainMesh fit a ~4 m virtual table.
+      this.sceneRoot.terrainGroup.position.set(0, 1.0, -0.7);
+      this.sceneRoot.terrainGroup.scale.setScalar(0.35);
+      console.log('[ar] terrain placed at (0, 1.0, -0.7) scale 0.35');
 
       session.addEventListener('end', () => this._onEnd());
     } catch (err) {
@@ -79,6 +95,7 @@ export class ARSession extends EventEmitter {
     this.sceneRoot.table.visible = true;
     this.sceneRoot.scene.background = new THREE.Color('#070a10');
     this.sceneRoot.scene.fog = new THREE.Fog('#070a10', 18, 50);
+    this.sceneRoot.renderer.setClearColor(0x070a10, 1);
     this.sceneRoot.terrainGroup.position.set(0, 0, 0);
     this.sceneRoot.terrainGroup.scale.setScalar(1);
     this.emit('exit');
