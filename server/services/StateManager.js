@@ -37,11 +37,12 @@ export class StateManager extends EventEmitter {
     this.fireArrivalByNode = new Map();   // nodeId -> minutes until fire
     this.evacuation = {
       lastRunAt: 0,
-      lastRunSimMin: 0,      // sim-clock when evac last ran (for evacuatedPct)
+      lastRunSimMin: 0,
       zones: scenario.zones.map(z => ({ ...z })),
       bottlenecks: [],
       shelterUsage: scenario.shelters.map(s => ({ nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0 })),
       lostRoads: 0,
+      fireBlockedRoads: 0,
       totalEvacuated: 0,
       totalPopulation: scenario.populations.reduce((a, p) => a + p.count, 0)
     };
@@ -104,10 +105,12 @@ export class StateManager extends EventEmitter {
       fire: { ...this.fire, arrivalGrid: undefined },
       evacuation: {
         lastRunAt: this.evacuation.lastRunAt,
+        lastRunSimMin: this.evacuation.lastRunSimMin,
         zones: this.evacuation.zones.map(z => ({ ...z })),
         bottlenecks: this.evacuation.bottlenecks.slice(0, 10),
         shelterUsage: this.evacuation.shelterUsage,
         lostRoads: this.evacuation.lostRoads,
+        fireBlockedRoads: this.evacuation.fireBlockedRoads || 0,
         totalEvacuated: this.evacuation.totalEvacuated,
         totalPopulation: this.evacuation.totalPopulation
       },
@@ -156,6 +159,8 @@ export class StateManager extends EventEmitter {
         bottlenecks: this.evacuation.bottlenecks.map(b => ({ ...b })),
         shelterUsage: this.evacuation.shelterUsage.map(s => ({ ...s })),
         lostRoads: this.evacuation.lostRoads,
+        fireBlockedRoads: this.evacuation.fireBlockedRoads || 0,
+        lastRunSimMin: this.evacuation.lastRunSimMin,
         totalEvacuated: this.evacuation.totalEvacuated,
         totalPopulation: this.evacuation.totalPopulation
       },
@@ -182,6 +187,7 @@ export class StateManager extends EventEmitter {
     this.fireArrivalByNode = new Map(snap.fireArrivalByNode);
     this.evacuation = {
       lastRunAt: snap.evacuation.lastRunAt,
+      lastRunSimMin: snap.evacuation.lastRunSimMin || 0,
       zones: snap.evacuation.zones.map(z => ({
         ...z,
         route: z.route ? { ...z.route, edgeIds: z.route.edgeIds.slice(), destinations: (z.route.destinations || []).map(d => ({ ...d })) } : null,
@@ -190,6 +196,7 @@ export class StateManager extends EventEmitter {
       bottlenecks: snap.evacuation.bottlenecks.map(b => ({ ...b })),
       shelterUsage: snap.evacuation.shelterUsage.map(s => ({ ...s })),
       lostRoads: snap.evacuation.lostRoads,
+      fireBlockedRoads: snap.evacuation.fireBlockedRoads || 0,
       totalEvacuated: snap.evacuation.totalEvacuated,
       totalPopulation: snap.evacuation.totalPopulation
     };
@@ -217,6 +224,7 @@ export class StateManager extends EventEmitter {
       bottlenecks: [],
       shelterUsage: scenario.shelters.map(s => ({ nodeId: s.nodeId, name: s.name, capacity: s.capacity, used: 0 })),
       lostRoads: 0,
+      fireBlockedRoads: 0,
       totalEvacuated: 0,
       totalPopulation: scenario.populations.reduce((a, p) => a + p.count, 0)
     };
@@ -319,6 +327,15 @@ export class StateManager extends EventEmitter {
     this.evacuation.bottlenecks = result.bottlenecks;
     this.evacuation.shelterUsage = result.shelterUsage || this.evacuation.shelterUsage;
     this.evacuation.totalEvacuated = result.totalEvacuated;
+
+    // Count edges where fire has already arrived at the current sim clock.
+    const now = this.simTimeMin;
+    const fa = this.fireArrivalByNode;
+    this.evacuation.fireBlockedRoads = this.scenario.edges.filter(e => {
+      const t = Math.min(fa.get(e.u) ?? Infinity, fa.get(e.v) ?? Infinity);
+      return Number.isFinite(t) && t <= now;
+    }).length;
+
     this.broadcast('evacuation', this.snapshot().evacuation);
   }
 

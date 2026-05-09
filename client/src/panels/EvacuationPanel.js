@@ -4,6 +4,8 @@ export class EvacuationPanel extends Panel {
   constructor(layer, position) {
     super(layer, 'EVACUATION STATUS', position);
     this._roads = { motorway: null, trunk: null };  // populated from scenario
+    this._lastEv = null;
+    this._simTimeMin = 0;
     this.body.innerHTML = `
       <div id="ev-historical" style="display:none;background:rgba(255,184,107,0.06);border-left:2px solid var(--accent-warm);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.45"></div>
       <div id="ev-census" style="display:none;background:rgba(94,234,141,0.06);border-left:2px solid var(--accent-good);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.55"></div>
@@ -75,26 +77,84 @@ export class EvacuationPanel extends Panel {
     `;
     el.style.display = 'block';
   }
+  setSimTime(min) {
+    this._simTimeMin = min;
+    if (this._lastEv) this._renderOverview(this._lastEv);
+  }
+
   update(ev, snap) {
     if (!ev) return;
-    const $ = (id) => this.body.querySelector('#' + id);
-    const overview = $('ev-overview');
-    const evacuated = ev.zones.reduce((a, z) => a + (z.evacuatedPct || 0), 0) / Math.max(1, ev.zones.length);
-    overview.innerHTML = `
-      <div class="metric"><span class="metric-label">Pop</span><span class="metric-val">${ev.totalPopulation.toLocaleString()}</span></div>
-      <div class="metric"><span class="metric-label">Evacuated</span><span class="metric-val good">${Math.round(evacuated)}%</span></div>
-      <div class="metric"><span class="metric-label">Bottlenecks</span><span class="metric-val ${ev.bottlenecks.length ? 'warn' : ''}">${ev.bottlenecks.length}</span></div>
-      <div class="metric"><span class="metric-label">Roads Lost</span><span class="metric-val ${ev.lostRoads ? 'bad' : ''}">${ev.lostRoads || 0}</span></div>
-    `;
+    this._lastEv = ev;
+    this._renderOverview(ev);
+    this._renderZones(ev);
+    this._renderShelters(ev);
+    this._renderBottlenecks(ev);
+  }
 
-    const zonesEl = $('ev-zones');
+  _liveEvacuatedPct(z, lastRunSimMin) {
+    if (!z.evacMin || z.evacMin <= 0) return z.evacuatedPct || 0;
+    if (z.level < 2) return 0;
+    const elapsed = Math.max(0, this._simTimeMin - (lastRunSimMin || 0));
+    return Math.min(100, Math.round((elapsed / z.evacMin) * 100));
+  }
+
+  _renderOverview(ev) {
+    const el = this.body.querySelector('#ev-overview');
+    if (!el) return;
+    const lrs = ev.lastRunSimMin || 0;
+
+    // Weighted evacuated % across GO zones using live sim-clock progress
+    let totalPop = 0, totalEvacPop = 0;
+    for (const z of ev.zones) {
+      const pop = z.population || 0;
+      totalPop += pop;
+      if (z.level >= 2) {
+        totalEvacPop += pop * this._liveEvacuatedPct(z, lrs) / 100;
+      }
+    }
+    // Fall back to engine's routed count until any zone is active
+    const hasActiveZones = ev.zones.some(z => z.level >= 2);
+    let evacPct;
+    if (!hasActiveZones) {
+      evacPct = ev.totalEvacuated > 0
+        ? Math.min(99, Math.round(ev.totalEvacuated / ev.totalPopulation * 100))
+        : null;
+    } else {
+      evacPct = Math.round(totalEvacPop / Math.max(1, totalPop) * 100);
+    }
+    const evacDisplay = evacPct == null ? '—'
+      : `<span class="${evacPct >= 60 ? 'good' : evacPct >= 30 ? '' : 'bad'}">${evacPct}%</span>`;
+
+    const fireRoads = ev.fireBlockedRoads || 0;
+    const userRoads = ev.lostRoads || 0;
+    const totalLost = fireRoads + userRoads;
+    const lostTip = fireRoads && userRoads
+      ? `${fireRoads} fire + ${userRoads} blocked`
+      : fireRoads ? `${fireRoads} fire-reached`
+      : userRoads ? `${userRoads} manually blocked` : '';
+    const lostDisplay = totalLost
+      ? `<span class="bad" title="${lostTip}">${totalLost}</span>`
+      : `<span>0</span>`;
+
+    el.innerHTML = `
+      <div class="metric"><span class="metric-label">Pop</span><span class="metric-val">${ev.totalPopulation.toLocaleString()}</span></div>
+      <div class="metric"><span class="metric-label">Evacuated</span><span class="metric-val">${evacDisplay}</span></div>
+      <div class="metric"><span class="metric-label">Bottlenecks</span><span class="metric-val ${ev.bottlenecks.length ? 'warn' : ''}">${ev.bottlenecks.length}</span></div>
+      <div class="metric"><span class="metric-label">Roads Lost</span><span class="metric-val">${lostDisplay}</span></div>
+    `;
+  }
+
+  _renderZones(ev) {
+    const zonesEl = this.body.querySelector('#ev-zones');
+    if (!zonesEl) return;
+    const lrs = ev.lastRunSimMin || 0;
     zonesEl.innerHTML = ev.zones.map(z => {
       const lvlText = z.level === 3 ? 'LEVEL 3 GO' : z.level === 2 ? 'LEVEL 2 SET' : 'LEVEL 1 READY';
       const dests = z.route?.destinations
         ? z.route.destinations.slice(0, 2).map(d => `${d.name} (${d.count})`).join(', ')
         : null;
       const bn = z.bottleneck
-        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — switch to COMMAND and enable contraflow on ${this._roads.motorway || 'primary route'}</div>`
+        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — enable contraflow on ${this._roads.motorway || 'primary route'}</div>`
         : '';
       const hint = zoneActionHint(z, this._roads);
       const segCount = z.route?.edgeIds?.length || 0;
@@ -105,6 +165,10 @@ export class EvacuationPanel extends Panel {
       const destLine = dests
         ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests} ${segInfo}</div>`
         : `<div class="zone-meta" style="color:var(--accent-hot)">⚠ No route found</div>`;
+      const livePct = this._liveEvacuatedPct(z, lrs);
+      const pctLabel = z.level >= 2 && livePct > 0
+        ? `<span style="float:right;color:var(--text-dim);font-size:10px">${livePct}%</span>`
+        : '';
       return `<div class="zone-row l${z.level}">
         <div class="zone-name">
           <span>${z.name}</span>
@@ -114,27 +178,36 @@ export class EvacuationPanel extends Panel {
         ${destLine}
         ${bn}
         ${hint}
-        <div class="progress"><div class="progress-fill" style="width:${z.evacuatedPct || 0}%"></div></div>
+        ${pctLabel}<div class="progress"><div class="progress-fill" style="width:${livePct}%"></div></div>
       </div>`;
     }).join('');
+  }
 
-    const sheltersEl = $('ev-shelters');
+  _renderShelters(ev) {
+    const sheltersEl = this.body.querySelector('#ev-shelters');
+    if (!sheltersEl) return;
     const usage = ev.shelterUsage || [];
     sheltersEl.innerHTML = usage.map(s => {
-      const pct = Math.round((s.used / s.capacity) * 100);
+      const pct = s.capacity > 0 ? Math.round((s.used / s.capacity) * 100) : 0;
       return `<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:4px 0">
         <span>${s.name}</span>
-        <span style="color:var(--text-dim)">${s.used}/${s.capacity} <span style="color:${pct>85?'var(--accent-hot)':pct>60?'var(--accent-warm)':'var(--accent-good)'}">${pct}%</span></span>
+        <span style="color:var(--text-dim)">${s.used.toLocaleString()}/${s.capacity.toLocaleString()} <span style="color:${pct>85?'var(--accent-hot)':pct>60?'var(--accent-warm)':'var(--accent-good)'}">${pct}%</span></span>
       </div>`;
     }).join('') || '<span style="color:var(--text-dim)">No shelters in use</span>';
+  }
 
-    const botEl = $('ev-bot');
-    if (ev.bottlenecks.length === 0) {
+  _renderBottlenecks(ev) {
+    const botEl = this.body.querySelector('#ev-bot');
+    if (!botEl) return;
+    if (!ev.bottlenecks.length) {
       botEl.innerHTML = '<span style="color:var(--accent-good)">All routes flowing within capacity.</span>';
     } else {
-      botEl.innerHTML = ev.bottlenecks.slice(0, 4).map(b =>
-        `Edge ${b.edgeId} (${b.hwy}) · ${Math.round(b.ratio * 100)}% cap`
-      ).join('<br>');
+      botEl.innerHTML = ev.bottlenecks.slice(0, 4).map(b => {
+        const pct = Math.round(b.ratio * 100);
+        const roadName = b.name || (b.hwy ? b.hwy.charAt(0).toUpperCase() + b.hwy.slice(1) : `Road ${b.edgeId}`);
+        const sev = pct > 150 ? 'var(--accent-hot)' : pct > 110 ? 'var(--accent-warm)' : 'var(--text-dim)';
+        return `<span style="color:${sev}">${roadName} · ${pct}% cap</span>`;
+      }).join('<br>');
     }
   }
 }

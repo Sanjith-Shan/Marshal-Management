@@ -106,6 +106,7 @@ class App {
       if (this.fireCA) this.fireCA.simMinutes = simTimeMin;
       this._maybeSnapCA(simTimeMin);
       this._refreshFireBlockedEdges(simTimeMin);
+      this.panels.setSimTime(simTimeMin);
     });
 
     this.socket.on('time-fast-forward', ({ steps, targetMin }) => {
@@ -259,14 +260,20 @@ class App {
   }
 
   _onCanvasHover(ev) {
-    if (this._currentMode !== 'COMMAND' || !this.roads || this.ar.active) return;
-    if (this.desktop.dragging) return;
+    if (this.ar.active || this.desktop.dragging) return;
     const rect = this.canvas.getBoundingClientRect();
     const x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-    const hit = this.roads.pickEdge(this.scene.camera, x, y);
-    this.roads.setHover(hit);
-    this.canvas.style.cursor = hit !== null ? 'pointer' : 'crosshair';
+
+    if (this._currentMode === 'COMMAND' && this.roads) {
+      const hit = this.roads.pickEdge(this.scene.camera, x, y);
+      this.roads.setHover(hit);
+      this.canvas.style.cursor = hit !== null ? 'pointer' : 'crosshair';
+    } else if (this._currentMode === 'EVACUATE' && this.zones) {
+      const hit = this.zones.pickZone(this.scene.camera, x, y);
+      this.zones.setHover(hit);
+      this.canvas.style.cursor = hit !== null ? 'pointer' : 'default';
+    }
   }
 
   _buildWorld() {
@@ -442,8 +449,10 @@ class App {
       if (zoneName) {
         const zone = this.snapshot.evacuation?.zones?.find(z => z.name === zoneName);
         if (zone) {
-          // Cycle: 1 (READY) → 2 (SET) → 3 (GO) → 1
           const nextLevel = (zone.level % 3) + 1;
+          const labels = { 1: 'LEVEL 1 READY', 2: 'LEVEL 2 SET', 3: 'LEVEL 3 GO' };
+          const severity = nextLevel === 3 ? 'crit' : nextLevel === 2 ? 'warn' : 'ok';
+          this.hud.showActionToast(`${zoneName} → ${labels[nextLevel]}`, severity);
           this.socket.emit('action', {
             type: 'override-zone',
             payload: { zoneId: zone.id, level: nextLevel }

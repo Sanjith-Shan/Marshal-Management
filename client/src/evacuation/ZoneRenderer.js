@@ -19,6 +19,7 @@ export class ZoneRenderer {
     this.byZone = new Map();
     this._evacMode = false;
     this._lastSnap = null;
+    this._hovered = null;
     this._build();
   }
 
@@ -73,7 +74,7 @@ export class ZoneRenderer {
       this.group.add(outline);
 
       mesh.userData.zoneName = zone;
-      this.byZone.set(zone, { mesh, outline, level: 1 });
+      this.byZone.set(zone, { mesh, outline, level: 1, _baseOpacity: 0.18, _hoverBoost: 0 });
     }
   }
 
@@ -86,8 +87,22 @@ export class ZoneRenderer {
     return hits[0].object.userData.zoneName ?? null;
   }
 
+  setHover(zoneName) {
+    if (this._hovered === zoneName) return;
+    if (this._hovered) {
+      const old = this.byZone.get(this._hovered);
+      if (old) old._hoverBoost = 0;
+    }
+    this._hovered = zoneName;
+    if (zoneName) {
+      const rec = this.byZone.get(zoneName);
+      if (rec) rec._hoverBoost = 1;
+    }
+  }
+
   setEvacMode(active) {
     this._evacMode = active;
+    if (!active) this.setHover(null);
     if (this._lastSnap) this.applySnapshot(this._lastSnap);
   }
 
@@ -101,8 +116,7 @@ export class ZoneRenderer {
       const c = LEVEL_COLOR[z.level] ?? LEVEL_COLOR[1];
       rec.mesh.material.color.setHex(c);
       rec.outline.material.color.setHex(c);
-      // In evacuate mode zones are the primary visual — increase fill opacity.
-      rec.mesh.material.opacity = em
+      rec._baseOpacity = em
         ? (z.level === 3 ? 0.58 : z.level === 2 ? 0.40 : 0.24)
         : (z.level === 3 ? 0.34 : z.level === 2 ? 0.22 : 0.16);
       rec.level = z.level;
@@ -110,15 +124,20 @@ export class ZoneRenderer {
   }
 
   update(dt) {
-    const t = performance.now() / 600;
     const em = this._evacMode;
+    const now = performance.now();
     for (const rec of this.byZone.values()) {
+      // Lerp hover boost so the highlight fades in/out smoothly (~150 ms)
+      const targetBoost = rec._hoverBoost || 0;
+      rec._currentBoost = rec._currentBoost == null ? targetBoost
+        : rec._currentBoost + (targetBoost - rec._currentBoost) * Math.min(1, dt * 8);
+      rec.mesh.material.opacity = rec._baseOpacity + rec._currentBoost * 0.22;
+
       if (rec.level === 3) {
-        // Faster, more prominent pulse in evacuate mode
         const period = em ? 400 : 600;
-        rec.outline.material.opacity = (em ? 0.75 : 0.6) + 0.35 * Math.sin(performance.now() / period);
+        rec.outline.material.opacity = (em ? 0.75 : 0.6) + 0.35 * Math.sin(now / period);
       } else {
-        rec.outline.material.opacity = em ? 0.85 : 0.7;
+        rec.outline.material.opacity = em ? (rec._currentBoost > 0.1 ? 1.0 : 0.85) : 0.7;
       }
     }
   }

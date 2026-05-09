@@ -100,7 +100,25 @@ export class HUD {
     el.id = 'mode-toast';
     el.className = 'mode-toast hidden';
     document.getElementById('hud').appendChild(el);
+
+    this._actionToast = document.createElement('div');
+    this._actionToast.id = 'action-toast';
+    this._actionToast.className = 'mode-toast hidden';
+    this._actionToast.style.cssText = 'bottom:80px;top:auto;';
+    document.getElementById('hud').appendChild(this._actionToast);
+    this._actionToastTimer = null;
+
     return el;
+  }
+
+  showActionToast(text, severity = 'info') {
+    const colors = { info: 'var(--accent)', warn: 'var(--accent-warm)', crit: 'var(--accent-hot)', ok: 'var(--accent-good)' };
+    this._actionToast.textContent = text;
+    this._actionToast.style.borderColor = colors[severity] || colors.info;
+    this._actionToast.style.color = colors[severity] || colors.info;
+    this._actionToast.classList.remove('hidden');
+    clearTimeout(this._actionToastTimer);
+    this._actionToastTimer = setTimeout(() => this._actionToast.classList.add('hidden'), 2200);
   }
 
   setEvacBannerVisible(visible) {
@@ -138,8 +156,8 @@ export class HUD {
   showModeToast(mode) {
     const descriptions = {
       MONITOR:  'Monitor Mode — observation only',
-      COMMAND:  'Command Mode — click roads to block',
-      EVACUATE: 'Evacuation Mode — routing panel open · press E to recompute'
+      COMMAND:  'Command Mode — click roads to block/unblock',
+      EVACUATE: 'Evacuation Mode — click zones to upgrade READY → SET → GO'
     };
     const colors = {
       MONITOR:  'var(--accent)',

@@ -60,6 +60,7 @@ export class PanelManager {
 
   updateWeather(w) { this.panels.weather.update(w); }
   updateEvacuation(ev) { this.panels.evacuation.update(ev); }
+  setSimTime(min) { this.panels.evacuation.setSimTime(min); }
 
   setHistory(msgs) { this.panels.advisor.setHistory(msgs); }
   appendAdvisor(msg) { this.panels.advisor.append(msg); }
