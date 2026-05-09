@@ -42,7 +42,7 @@ function assert(cond, msg) {
   for (const z of result.zones) {
     console.log(`  ${z.name}: L${z.level} eta=${z.etaMin}m evac=${z.evacMin}m margin=${z.marginMin}m route?${!!z.route}`);
   }
-  assert(result.zones.length === 6, '6 zones returned');
+  assert(result.zones.length === 8, '8 zones returned');
   assert(result.zones.every(z => z.evacMin >= 0), 'all zones have non-negative evac time');
   assert(result.shelterUsage.some(s => s.used > 0), 'at least one shelter is in use');
 

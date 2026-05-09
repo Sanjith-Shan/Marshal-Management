@@ -248,6 +248,8 @@ function generateFuelGrid(heightmap, rng) {
   carveAt(32.918, -117.131, 12);   // Mira Mesa (broader coastal urban)
   carveAt(32.7831, -117.1196, 10); // Mission Valley / Qualcomm
   carveAt(32.99,   -117.07,   8);  // Rancho Peñasquitos / Carmel Mountain
+  carveAt(32.715,  -117.157, 13);  // Downtown SD — densest urban core
+  carveAt(32.750,  -117.130, 10);  // North Park / Hillcrest
   return arr;
 }
 
@@ -425,6 +427,8 @@ function generatePopulations(nodes, rng) {
     cluster(32.918, -117.131, 2800, 'Mira Mesa'),           // West-side residential
     cluster(32.99,  -117.07,  2400, 'Rancho Peñasquitos'),  // North suburbs
     cluster(32.85,  -117.27,  3600, 'La Jolla / UCSD'),     // Coastal west
+    cluster(32.715, -117.157, 5000, 'Downtown SD'),         // Gaslamp / East Village / Little Italy
+    cluster(32.750, -117.130, 3800, 'North Park'),          // North Park / Hillcrest dense residential
   ];
   const populations = [];
   const used = new Set();
@@ -467,11 +471,19 @@ function pickShelters(nodes, populations) {
     // Qualcomm Stadium — the actual 2003 Cedar Fire mass-evacuation shelter
     // (housed ~10,000 evacuees). Demolished 2021; coords are the historical
     // location, used here for fidelity to the real event.
-    shelter(32.7831, -117.1196, 'Qualcomm Stadium',    8000),
-    shelter(32.918,  -117.132,  'Mira Mesa HS',         800),    // west, Scripps Ranch
-    shelter(32.969,  -117.011,  'Poway HS',             600),    // central, Poway
-    shelter(33.045,  -116.864,  'Ramona Senior HS',     800),    // east, Ramona
-    shelter(32.7745, -117.0823, 'SDSU Aztec Stadium',  2500),    // central south, distinct from any zone
+    shelter(32.7831, -117.1196, 'Qualcomm Stadium',    8000),    // historical 2003 mass-evac
+    shelter(32.918,  -117.132,  'Mira Mesa HS',        6500),    // Mira Mesa (2800) + Scripps Ranch (3200) overflow
+    shelter(32.969,  -117.011,  'Poway HS',            4800),    // Poway (2100) + Rancho Peñasquitos (2400) overflow
+    shelter(33.045,  -116.864,  'Ramona Senior HS',    5500),    // serves Ramona (4800)
+    shelter(32.7745, -117.0823, 'SDSU Aztec Stadium',  4000),    // central south, reserve capacity
+    shelter(32.875,  -117.235,  'UCSD East Campus',    4000),    // serves La Jolla / UCSD (3600)
+    // New shelters for downtown zones — placed well away to show long routing arcs.
+    // Mission Bay Park: fire-barrier bay to the west, ~8 km from Gaslamp; real
+    // outdoor staging area used during SD County OES exercises.
+    shelter(32.768,  -117.226,  'Mission Bay Park',    7000),
+    // Del Mar Fairgrounds: actual 2007 Witch Creek evacuation site, ~27 km north
+    // of downtown — produces the longest dot-flow arcs on the map.
+    shelter(32.959,  -117.258,  'Del Mar Fairgrounds', 6000),
   ];
   const populationNodeIds = new Set(populations.map(p => p.nodeId));
   return candidates.map(c => {
