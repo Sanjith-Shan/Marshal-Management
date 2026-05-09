@@ -13,6 +13,7 @@ import { AIAdvisor } from './services/AIAdvisor.js';
 import { ArduinoService } from './services/ArduinoService.js';
 import { FIRMSService } from './services/FIRMSService.js';
 import { CensusService } from './services/CensusService.js';
+import { loadOSMRoadNetwork } from './services/OSMService.js';
 import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
@@ -34,7 +35,17 @@ const io = new SocketIO(httpServer, {
 
 // --------------------- bootstrap ---------------------
 
-const scenario = ScenarioBuilder.build({ seed: 42 });
+// Try to load real OSM road network for the Cedar Corridor; fall back to
+// procedural if unavailable. This kicks off async; we wait for it before
+// constructing the scenario so the road graph is real on first paint.
+let osmNetwork = null;
+try {
+  osmNetwork = await loadOSMRoadNetwork();
+} catch (err) {
+  console.warn('[osm] load threw:', err.message);
+}
+
+const scenario = ScenarioBuilder.build({ seed: 42, roadNetwork: osmNetwork });
 const state = new StateManager(scenario);
 const evac = new EvacuationEngine(state);
 const weather = new WeatherService();
@@ -158,7 +169,11 @@ async function handleAction(msg, socket) {
       break;
     case 'reset': {
       const nextId = payload?.scenarioId || state.scenario.scenarioId || DEFAULT_SCENARIO_ID;
-      state.resetScenario(ScenarioBuilder.build({ seed: state.scenario.seed, scenarioId: nextId }));
+      state.resetScenario(ScenarioBuilder.build({
+        seed: state.scenario.seed,
+        scenarioId: nextId,
+        roadNetwork: osmNetwork,    // reuse cached OSM if loaded
+      }));
       break;
     }
     case 'mode':

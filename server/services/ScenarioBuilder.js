@@ -8,8 +8,29 @@
 import { mulberry32 } from './rng.js';
 
 const GRID = 128;          // CA grid resolution
-const WORLD_M = 24_000;    // 24 km world span
+const WORLD_M = 24_000;    // 24 km world span (scene-units anchor; not real meters)
 const M_PER_CELL = WORLD_M / GRID;
+
+// Real-world bounding box: Cedar Corridor, San Diego County. Contains
+// Scripps Ranch, Poway, Ramona, Cedar Creek ignition (33.0356, -116.7),
+// AND Qualcomm Stadium (32.7831, -117.1196) — the actual 2003 Cedar Fire
+// emergency shelter that housed ~10,000 evacuees.
+// All real lat/lng inputs are projected into the 128×128 grid via this bbox.
+export const BBOX = {
+  latMin: 32.75, latMax: 33.10,        // ~38.8 km tall (lat: 111 km/°)
+  lngMin: -117.15, lngMax: -116.65,    // ~46.6 km wide at 33°N (lng: 93 km/°)
+};
+const BBOX_WIDTH_M = (BBOX.lngMax - BBOX.lngMin) * 93_000;
+const BBOX_HEIGHT_M = (BBOX.latMax - BBOX.latMin) * 111_000;
+
+export function latLngToGrid(lat, lng) {
+  const gx = (lng - BBOX.lngMin) / (BBOX.lngMax - BBOX.lngMin) * GRID;
+  const gy = (BBOX.latMax - lat) / (BBOX.latMax - BBOX.latMin) * GRID;
+  return {
+    gx: Math.max(0, Math.min(GRID - 1, gx)),
+    gy: Math.max(0, Math.min(GRID - 1, gy)),
+  };
+}
 
 // Fuel classes match the Rothermel-lite model used client-side.
 const FUEL = {
@@ -28,7 +49,7 @@ export const SCENARIOS = {
   cedar: {
     id: 'cedar',
     name: 'Cedar Fire (2003)',
-    ignition: { gx: 80, gy: 65 },
+    realIgnition: { lat: 33.0356, lng: -116.7 },    // Cedar Creek, Cleveland NF
     meta: {
       realDate: '2003-10-25',
       realIgnitionLatLng: { lat: 33.0356, lng: -116.7 },     // Cedar Creek, Cleveland NF
@@ -47,7 +68,7 @@ export const SCENARIOS = {
   witch: {
     id: 'witch',
     name: 'Witch Creek (2007)',
-    ignition: { gx: 115, gy: 100 },
+    realIgnition: { lat: 33.0833, lng: -116.7167 },
     meta: {
       realDate: '2007-10-21',
       realIgnitionLatLng: { lat: 33.0833, lng: -116.7167 },
@@ -66,7 +87,7 @@ export const SCENARIOS = {
   plumas: {
     id: 'plumas',
     name: 'Plumas Approach (Western)',
-    ignition: { gx: 45, gy: 65 },
+    realIgnition: { lat: 32.95, lng: -117.10 },     // synthetic, west of Poway
     meta: {
       realDate: 'fictional',
       acresBurned: null,
@@ -78,17 +99,26 @@ export const SCENARIOS = {
 export const DEFAULT_SCENARIO_ID = 'cedar';
 
 export const ScenarioBuilder = {
-  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID } = {}) {
+  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID, roadNetwork = null } = {}) {
     const rng = mulberry32(seed);
     const preset = SCENARIOS[scenarioId] ?? SCENARIOS[DEFAULT_SCENARIO_ID];
 
     const heightmap = generateHeightmap(rng);
     const fuelGrid = generateFuelGrid(heightmap, rng);
-    const { nodes, edges, highways } = generateRoadNetwork(rng);
+    // Road network: external (real OSM) if provided, else procedural fallback.
+    const { nodes, edges, highways } = roadNetwork || generateRoadNetwork(rng);
     const populations = generatePopulations(nodes, rng);
     const shelters = pickShelters(nodes, populations);
     const zones = defineZones(populations);
-    const ignition = preset.ignition || pickIgnition(heightmap, fuelGrid, rng);
+    // Ignition: project real lat/lng to grid if scenario provides it; else
+    // pick procedurally from a high-fuel cell.
+    let ignition;
+    if (preset.realIgnition) {
+      const { gx, gy } = latLngToGrid(preset.realIgnition.lat, preset.realIgnition.lng);
+      ignition = { gx: Math.round(gx), gy: Math.round(gy) };
+    } else {
+      ignition = pickIgnition(heightmap, fuelGrid, rng);
+    }
 
     // Sanity: every population node must reach at least one shelter via the
     // road graph. This is a hidden check that runs at scenario build time.
@@ -353,11 +383,17 @@ function layArterial(nodes, edges, addNode, addEdge, a, b) {
 // ---------- populations ----------
 
 function generatePopulations(nodes, rng) {
-  // For each cluster centroid, distribute population across ~30 nearest nodes.
+  // Real San Diego community centers projected to grid coordinates.
+  // Population totals are scaled-down for routing-engine performance —
+  // real populations are surfaced separately via CensusService.
+  const cluster = (lat, lng, total, name) => {
+    const { gx, gy } = latLngToGrid(lat, lng);
+    return { cx: gx, cy: gy, total, name };
+  };
   const targets = [
-    { cx: 28, cy: 38, total: 3200, name: 'Scripps Ranch' },
-    { cx: 64, cy: 50, total: 2100, name: 'Poway' },
-    { cx: 96, cy: 78, total: 4800, name: 'Ramona' },
+    cluster(32.927, -117.084, 3200, 'Scripps Ranch'),   // SD neighborhood
+    cluster(32.963, -117.038, 2100, 'Poway'),           // City of Poway
+    cluster(33.041, -116.868, 4800, 'Ramona'),          // Ramona CDP
   ];
   const populations = [];
   const used = new Set();
@@ -389,11 +425,21 @@ function generatePopulations(nodes, rng) {
 }
 
 function pickShelters(nodes, populations) {
-  // 3 shelters, on the road network but outside the urban centers.
+  // Real shelter locations projected to grid. These are actual public
+  // facilities in the Cedar Corridor — picked as plausible 2003-era
+  // emergency shelter sites (high schools and large public venues).
+  const shelter = (lat, lng, name, capacity) => {
+    const { gx, gy } = latLngToGrid(lat, lng);
+    return { gx, gy, name, capacity };
+  };
   const candidates = [
-    { gx: 12, gy: 30, name: 'Alliant Univ.', capacity: 800 },
-    { gx: 50, gy: 100, name: 'Poway HS', capacity: 600 },
-    { gx: 18, gy: 90, name: 'Qualcomm Stadium', capacity: 8000 },
+    // Qualcomm Stadium — the actual 2003 Cedar Fire mass-evacuation shelter
+    // (housed ~10,000 evacuees). Demolished 2021; coords are the historical
+    // location, used here for fidelity to the real event.
+    shelter(32.7831, -117.1196, 'Qualcomm Stadium', 8000),
+    shelter(32.918,  -117.132,  'Mira Mesa HS',     800),    // west, Scripps Ranch
+    shelter(32.969,  -117.011,  'Poway HS',         600),    // central, Poway
+    shelter(33.045,  -116.864,  'Ramona Senior HS', 800),    // east, Ramona
   ];
   const populationNodeIds = new Set(populations.map(p => p.nodeId));
   return candidates.map(c => {

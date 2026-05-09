@@ -30,7 +30,7 @@ function assert(cond, msg) {
   assert(scn.nodes.length > 100, 'scenario has at least 100 road nodes');
   assert(scn.edges.length > 200, 'scenario has at least 200 road edges');
   assert(scn.populations.length > 5, 'scenario has multiple population nodes');
-  assert(scn.shelters.length === 3, 'scenario has 3 shelters');
+  assert(scn.shelters.length >= 3, 'scenario has at least 3 shelters');
   assert(scn.meta.reach.ok, 'all populations can reach a shelter');
 
   const state = new StateManager(scn);

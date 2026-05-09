@@ -3,6 +3,30 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+## 2026-05-08 — session 10
+
+**Real San Diego geography + OSM real roads + route invariant.** Now genuinely mimicking 2003 Cedar Fire on actual San Diego County data, not procedural noise.
+
+**1. Route invariant (`client/src/main.js`).** Removed the `level < 2` filter in `_applyEvacuationToScene` so every zone with a computed route — regardless of READY / SET / GO level — has its escape edges highlighted on the road map. Level differentiation is preserved through `RouteAnimator` particle counts (L1=25%, L2=60%, L3=100%) and visual styling. **All 3 zones always show their routes; all routes recompute when you block roads in COMMAND mode.** Closes the user-asked invariant.
+
+**2. Real-world bbox + projection (`server/services/ScenarioBuilder.js`).** New exported `BBOX = { latMin: 32.75, latMax: 33.10, lngMin: -117.15, lngMax: -116.65 }` covers the Cedar Corridor from Mission Valley (Qualcomm Stadium) up to Cedar Creek ignition point. New `latLngToGrid(lat, lng)` helper projects real coords into the 128×128 grid. All scenario data — community centers, shelters, ignition — is now driven by real lat/lng:
+   - Scripps Ranch: (32.927, −117.084)
+   - Poway: (32.963, −117.038)
+   - Ramona: (33.041, −116.868)
+   - Cedar 2003 ignition: (33.0356, −116.7) — Cedar Creek, Cleveland NF
+   - Witch 2007 ignition: (33.0833, −116.7167)
+   - Shelters: Qualcomm Stadium (32.7831, −117.1196) — the actual 2003 mass-evac shelter that housed ~10k evacuees, demolished 2021; Mira Mesa HS (32.918, −117.132); Poway HS (32.969, −117.011); Ramona Senior HS (33.045, −116.864).
+
+**3. Live OSM road network (`server/services/OSMService.js`).** New service queries the Overpass API on server startup for all drivable highways in `BBOX`, projects nodes via `latLngToGrid`, applies topology compression (collapses shape-only nodes into edges between actual intersections — drops node count ~20×), and returns a `{ nodes, edges, highways }` shape compatible with the procedural `ScenarioBuilder`. Result: **12,812 real San Diego road nodes / 15,418 edges** including I-15, SR-67, Pomerado Rd, Mira Mesa Blvd, Poway Rd, etc. Fetched once (~3 s), cached to `data/osm-cedar.json`, instant on subsequent boots. Falls back to procedural if Overpass is unreachable. Filters to motorway/trunk/primary/secondary/tertiary + their `*_link` variants — drops residential (~70k edges) for renderer performance.
+
+**4. Bootstrap is now async.** `server/index.js` uses top-level `await loadOSMRoadNetwork()` before `ScenarioBuilder.build()`. Reset action reuses the cached `osmNetwork` so scenario switches stay instant.
+
+**Verification.** All 3 zones routing to Qualcomm Stadium (the historically-correct 2003 destination); zero unreachable populations. Selftest 25/25 (one assertion changed: `>= 3` shelters since we now have 4); e2e 14/14; build clean. Server boot ~150 ms warm cache, ~3 s cold OSM fetch.
+
+**Still open:** real terrain DEM (USGS 3DEP), real fuel grid (LANDFIRE FBFM40), real Cedar Fire perimeter overlay (NIFC GeoJSON), AR/Quest 3, hardware UNO physical e2e.
+
+---
+
 ## 2026-05-08 — session 9
 
 **Panel usability overhaul: census hookup, weather interpretation, dynamic road names.**
