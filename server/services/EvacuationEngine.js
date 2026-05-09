@@ -162,11 +162,17 @@ export class EvacuationEngine {
         remaining -= placed;
 
         const zoneRec = zoneRoutes.get(p.zone) || {
-          edgeFreq: new Map(), totalCount: 0, costMin: 0, destinations: new Map()
+          paths: [], totalCount: 0, costMin: 0, destinations: new Map()
         };
-        for (const eid of result.path) {
-          zoneRec.edgeFreq.set(eid, (zoneRec.edgeFreq.get(eid) || 0) + placed);
-        }
+        // Store the actual ordered Dijkstra path of this routing decision
+        // so the client renders a connected polyline from population to
+        // shelter (no gaps from frequency-aggregation across disjoint paths).
+        zoneRec.paths.push({
+          path: result.path,
+          count: placed,
+          dest: dest.name,
+          costMin: result.costMin,
+        });
         zoneRec.totalCount += placed;
         zoneRec.costMin = Math.max(zoneRec.costMin, result.costMin);
         zoneRec.destinations.set(dest.name,
@@ -206,21 +212,60 @@ export class EvacuationEngine {
         : 999;
 
       const route = zoneRoutes.get(z.name);
-      if (route) {
+      if (route && route.paths.length) {
         z.evacMin = Math.round(route.costMin + HEADWAY_MIN);
         z.marginMin = Number.isFinite(z.etaMin) ? z.etaMin - z.evacMin : 999;
-        // Sort all route edges by frequency; top 18 = primary, next 10 = secondary.
-        const sorted = [...route.edgeFreq.entries()].sort((a, b) => b[1] - a[1]);
-        const primary   = sorted.slice(0, 18).map(([eid]) => eid);
-        const secondary = sorted.slice(18, 28).map(([eid]) => eid);
+        // Group paths by destination shelter. Primary route goes to the
+        // shelter receiving the MOST evacuees from this zone (the "main"
+        // destination). Pick the longest path to that destination so the
+        // visual spans from population to shelter — gives a complete,
+        // connected polyline (no frequency-aggregation gaps).
+        const pathsByDest = new Map();
+        for (const p of route.paths) {
+          if (!pathsByDest.has(p.dest)) pathsByDest.set(p.dest, []);
+          pathsByDest.get(p.dest).push(p);
+        }
+        let topDest = null, topCount = -1;
+        for (const [dest, paths] of pathsByDest) {
+          const c = paths.reduce((a, p) => a + p.count, 0);
+          if (c > topCount) { topCount = c; topDest = dest; }
+        }
+        const topPaths = pathsByDest.get(topDest)
+          .slice().sort((a, b) => b.path.length - a.path.length);
+        const primary = topPaths[0].path.slice();
+        const primarySet = new Set(primary);
+
+        // Secondary: paths to alternate shelters + secondary subgroups going
+        // to the primary destination, edges not already on primary.
+        const seen = new Set(primarySet);
+        const secondaryEdges = [];
+        // Prefer alt-destination paths first (they show alternate routes).
+        const altPaths = [];
+        for (const [dest, paths] of pathsByDest) {
+          if (dest === topDest) continue;
+          // Longest path per alt destination
+          paths.slice().sort((a, b) => b.path.length - a.path.length);
+          altPaths.push(...paths);
+        }
+        // Then leftover paths to top destination.
+        for (let i = 1; i < topPaths.length; i++) altPaths.push(topPaths[i]);
+        for (const p of altPaths) {
+          for (const eid of p.path) {
+            if (seen.has(eid)) continue;
+            seen.add(eid);
+            secondaryEdges.push(eid);
+            if (secondaryEdges.length >= 80) break;
+          }
+          if (secondaryEdges.length >= 80) break;
+        }
         z.route = {
           edgeIds: primary,
-          secondaryEdgeIds: secondary,
+          secondaryEdgeIds: secondaryEdges,
           destinations: [...route.destinations.entries()]
             .sort((a, b) => b[1] - a[1])
             .map(([name, count]) => ({ name, count }))
         };
-        const myBottlenecks = bottlenecks.filter(b => primary.includes(b.edgeId));
+        const myBottlenecks = bottlenecks.filter(b => primarySet.has(b.edgeId));
         z.bottleneck = myBottlenecks.length
           ? { edgeId: myBottlenecks[0].edgeId, ratio: Math.round(myBottlenecks[0].ratio * 100) }
           : null;

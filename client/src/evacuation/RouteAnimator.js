@@ -6,8 +6,11 @@
 import * as THREE from 'three';
 import { chainPolyline } from './_polyline.js';
 
-const PARTICLES_PER_ROUTE = 90;
-const SPEED = 0.6;                // world units per second along path
+// Tuned for visibility: fewer, larger, slower-flowing particles. Too many
+// small fast dots blur the line; ~35 large slow dots read clearly as a
+// flowing direction indicator.
+const PARTICLES_PER_ROUTE = 35;
+const SPEED = 0.25;               // world units per second along path
 
 export class RouteAnimator {
   constructor(scenario, terrain) {
@@ -22,11 +25,10 @@ export class RouteAnimator {
 
   setEvacMode(active) {
     this._evacMode = active;
-    // Boost or restore all existing route materials without rebuild.
     for (const r of this.routes.values()) {
-      const baseSize = r.level === 3 ? 0.05 : r.level === 2 ? 0.04 : 0.028;
-      const baseOpacity = r.level >= 2 ? 0.95 : 0.55;
-      r.points.material.size    = active ? baseSize * 1.8 : baseSize;
+      const baseSize = r.level === 3 ? 0.075 : r.level === 2 ? 0.06 : 0.045;
+      const baseOpacity = r.level >= 2 ? 0.95 : 0.6;
+      r.points.material.size    = active ? baseSize * 1.6 : baseSize;
       r.points.material.opacity = active ? 1.0 : baseOpacity;
       r.points.material.needsUpdate = true;
     }
@@ -61,11 +63,11 @@ export class RouteAnimator {
       const color = z.level === 3 ? 0x66ff99
                    : z.level === 2 ? 0xfff088
                    : 0x88ccdd;
-      const baseSize    = z.level === 3 ? 0.05 : z.level === 2 ? 0.04 : 0.028;
-      const baseOpacity = z.level >= 2 ? 0.95 : 0.55;
+      const baseSize    = z.level === 3 ? 0.075 : z.level === 2 ? 0.06 : 0.045;
+      const baseOpacity = z.level >= 2 ? 0.95 : 0.6;
       const mat = new THREE.PointsMaterial({
         color,
-        size:    this._evacMode ? baseSize * 1.8 : baseSize,
+        size:    this._evacMode ? baseSize * 1.6 : baseSize,
         transparent: true,
         opacity: this._evacMode ? 1.0 : baseOpacity,
         depthWrite: false,
