@@ -1,0 +1,7 @@
+name: Marshal Board Diagnostic
+description: "Hardware health check for the UNO Q after an electrical incident. Reads A0/A1 + D2-D8 every 200 ms and prints to App Lab Console. No network."
+icon: 🔧
+version: "1.0.0"
+
+ports: []
+bricks: []
