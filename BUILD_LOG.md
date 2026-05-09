@@ -3,6 +3,122 @@
 **Hackathon:** Reboot the Earth 2026 | UCSD | May 8–9, 2026
 **Status:** In Progress
 
+---
+
+## 2026-05-08 — session 13 (status review + forward plan, NO CODE)
+
+This entry is intentionally non-implementation. Taking stock of where we are after twelve sessions, then prioritizing what's left.
+
+### Where we are
+
+**Real data sources, all live:**
+- NWS weather (KSAN station)
+- OpenAI gpt-4o-mini (advisor with full state context)
+- NASA FIRMS (California hotspots, 30-min refresh)
+- US Census ACS 2022 (San Diego County, City, Poway, Escondido)
+- OpenStreetMap roads via Overpass — 12,812 nodes / 15,418 edges in Cedar Corridor (cached)
+- USGS 3DEP elevation via EPQS — 7 m to 1259 m, 33×33 sampled, bilinear-resampled to 128×128 (cached)
+- Real lat/lng for community centers + Cedar 2003 / Witch 2007 ignition coordinates
+- Cedar 2003 / Witch 2007 historical metadata (acreage, fatalities, evacuee counts, wind conditions)
+
+**Working features (multi-session accumulation):**
+- 128×128 Rothermel-lite CA with verified wind asymmetry (4.3× downwind vs upwind at 35 kph) and explicit ember spotting > 25 kph
+- Capacity-aware Dijkstra evacuation engine with BPR congestion + wind-direction edge penalty + multi-shelter overflow
+- Connected Dijkstra-path routes (not top-N edges) — all 3 zones reach Qualcomm Stadium via real I-15 / SR-67
+- HH:MM military time anchored to scenario ignition; client CA stepping synced to server clock at 0.5 sim-min/wall-sec
+- Time-jump ±30/60 with snapshot-ring rewind, pause/resume, click-zone-to-escalate in EVACUATE
+- AI voice intents (block / upgrade / contraflow), proactive scan with terrain warning triangles, route-diff advisor messages on block-road
+- 3D N/S/E/W compass markers, 3D wind direction arrow, route flow particles (35 dots, slower, larger), population dots flowing along Dijkstra paths, contraflow chevrons, bottleneck rings with capacity labels
+- Per-renderer `setEvacMode` fan-out with smooth fades; mode toast; cursor affordance; road hover highlight
+- HUD live-data badges: 🌐 OSM+3DEP, 🛰 NASA FIRMS count, 🔥 fire stats
+- Three demo scenarios with picker (Cedar 2003 / Witch 2007 / Plumas Approach)
+
+**Quality posture:**
+- Selftest 25/25, e2e 14/14, build clean
+- Hermetic e2e via `MM_FORCE_MOCK`
+- Top-level await bootstrap with fallback per service
+- Disk caching for OSM and DEM
+- Snapshot ring buffer (24 × 5 sim-min ≈ 2 hr) for rewind
+- Project rule: no AI attribution in commits; user identity only
+
+### Re-grade vs v3 spec
+
+| v3 Feature | Was | Now | Change |
+|---|---|---|---|
+| 1. AR Tabletop Terrain Map | 🟡 | 🟢 desktop / 🔴 AR | Real DEM + OSM + compass + wind arrow on desktop. AR path still untested. |
+| 2. Live Fire Spread Simulation | 🟡 | 🟢 | Synced to clock; wind direction visible; ember spotting active. Fuel still procedural. |
+| 3. Evacuation Planning System | 🟢 / 🟡 | 🟢 | Dijkstra paths now connected end-to-end; secondary routes visible; reroute advisor messages. |
+| 4. Floating AR Information Panels | 🟡 | 🟢 desktop / 🔴 AR | DOM works on desktop; AR will need 3D pane port. |
+| 5. AI Strategic Advisor | 🟡 | 🟢 | OpenAI + voice in/out + intent → state mutation + proactive overlays + reroute messages. |
+| 6. Voice + Hand + Hardware Control | 🔴 / 🟡 | 🟡 | Voice end-to-end, joystick wired. Hardware never flashed; hand tracking 0%. |
+| 7. Live Data Feeds | 🟡 | 🟢 | NWS + FIRMS + Census + OSM + 3DEP all live. |
+
+### Remaining work — prioritized into tiers
+
+**Tier A — last "real data" pieces (1–4 hours each, deepens demo credibility):**
+
+- A1. **LANDFIRE FBFM40 fuel grid.** One-time download from landfire.gov, gdal-resample to 128×128 uint8 mapped to existing 5 fuel classes, ScenarioBuilder loads alongside DEM/OSM. Closes the "fuel is still procedural" caveat in every recent BUILD_LOG entry.
+- A2. **NIFC 2003 Cedar Fire perimeter overlay.** Download GeoJSON of the actual burn footprint. New `CedarPerimeterOverlay` renderer toggles a translucent shape on the terrain. Demo line: "this is what actually burned in 2003; here's our sim at the same minute."
+- A3. **Census tract-level population.** Currently using city totals + synthetic 40-node distribution. Real ACS tract-level distribution would let the engine assign demand to actual neighborhoods. Higher effort (~3 hours, requires tract geometry + per-tract ACS calls).
+
+**Tier B — AR / Quest 3 (multi-session, hardware required):**
+
+- B1. **HTTPS via cloudflared tunnel** (~30 min). Unblocks Quest 3 testing.
+- B2. **Validate `immersive-ar` on real Quest 3.** Will likely surface plane detection / hand tracking issues.
+- B3. **3D AR panel renderer.** DOM panels likely invisible in passthrough. Convert to Canvas-textured Mesh, or first try `domOverlay` as fallback. Multi-day from scratch.
+- B4. **RATK plane detection / table anchoring.** Currently terrain hardcoded at `(0, 0.05, -1.2)`.
+- B5. **Hand tracking + gesture detection.** v3 spec project structure lists `HandTracking.js` and `GestureDetector.js` but they don't exist in repo.
+
+**Tier C — Hardware command board:**
+
+- C1. **Flash classic UNO + USB serial validation.** Firmware compiles in editor but never sent live data; field order or pin mapping issues could surface only on hardware.
+- C2. **"Hold = ±60 min" press detection.** Host-side timing in `ArduinoService.js` (track press duration; fire a second event after ~800 ms held).
+- C3. **UNO Q migration.** Production target: wireless WebSocket transport via Arduino App Lab. Multi-session.
+
+**Tier D — Polish & UX:**
+
+- D1. **Performance audit with real OSM (15k edges).** Pick proxy is one Mesh per edge; raycasting in COMMAND-mode hover may lag at this density. Profile and possibly switch to InstancedMesh or filter pick targets to motorway/trunk/primary only.
+- D2. **Onboarding overlay.** `?` help is minimal. A first-launch walkthrough explaining modes / voice / scenarios would be valuable for judges.
+- D3. **Routes change animation.** Currently route changes are instant; fade old → new would make rerouting more legible.
+- D4. **Distinct fire-blocked vs user-blocked edge styling.** Both red today; users can't tell which is which.
+- D5. **Voice transcription preview while holding Space.** Currently silent until release.
+- D6. **Demo scenario savepoints.** `data/demo-scenarios/` empty; canonical "fire at T+30 with I-15 blocked" save would let judges see the exact same demo every time.
+
+**Tier E — Engine refinements:**
+
+- E1. **30-min / 1-hr fire projection ghost layer.** Preview future fire perimeter without committing time-jump.
+- E2. **Ember-jump particle visualization.** Spot fires happen but are invisible — brief arc particles from source to landing cell would make this dramatic.
+- E3. **"What if we lose I-15?" hypothetical mode.** Voice intent currently mutates state; could instead preview alternate routing without committing the block.
+- E4. **CA slope physics on real DEM.** Slope multiplier `* 50` was tuned for procedural-noise gradient distributions; real DEM has different distribution. Visual fire spread "feels right" but not rigorously calibrated against real terrain gradients.
+
+### Risks and gotchas (worth re-flagging)
+
+1. **Late-joining socket clients have no replay history.** Server's snapshot ring stays server-side; a client connecting mid-demo cannot rewind further than its first received `tick`.
+2. **Performance unknown at full real-OSM density.** Server-side selftest passes but client rendering of 15 k edges has not been profiled in production. Pick proxy especially.
+3. **CA `Math.random()` is unseeded** — same scenario seed produces different fire spread each run. Acceptable now; would require seeded refactor for reproducible demos.
+4. **AR completely unvalidated.** Listed since session 1 audit. If the pitch leans on AR, this is the biggest risk.
+5. **`WindIndicator` + `CompassMarkers` parented to terrain group.** AR mode scales the group; sprite scaling under scaled parents has not been verified.
+6. **Slope physics not re-tuned for real DEM.** Visual feels right but fire spread on steep terrain may be over- or under-driven.
+7. **OpenAI / FIRMS / Census keys are in `.env`** (gitignored, not pushed). Were shared in chat earlier — recommend rotation after demo.
+
+### Recommendation
+
+The desktop demo is shippable today. The next ~6 hours of work either deepens it (Tier A) or opens new fronts (B, C). Decision tree:
+
+- **Pitch is desktop-only:** Tier A in order (A1 → A2 → A3) → D2 onboarding → D1 performance audit. Result: every layer of the v3 spec backed by real data, with smoother UX.
+- **Pitch involves AR:** Pivot to B1 + B2 immediately. The AR session code is a black box until validated; surprise discoveries are likely. Budget 4+ hours.
+- **Pitch involves hardware:** C1 first. All other hardware work depends on that being live.
+
+If forced to pick a single next move with no other info: **A2 (NIFC perimeter overlay)** — highest demo-impact-per-effort. It unlocks the visceral "here's what really burned vs what we simulate" comparison, requires only one one-time GeoJSON download, and reuses existing renderer patterns.
+
+### Pending CLAUDE.md update
+
+Two new client renderers landed in session 12 that are not yet listed in the CLAUDE.md folder structure — adding both alongside this entry:
+- `client/src/ar/CompassMarkers.js`
+- `client/src/ar/WindIndicator.js`
+
+---
+
 ## 2026-05-08 — session 12
 
 **Compass markers + wind indicator + sim-clock-synced fire spread.**

@@ -13,7 +13,7 @@ AR fire-marshal command center for Reboot the Earth 2026 (UCSD). Runs on desktop
 client/                    Vite + Three.js + WebXR frontend
   src/
     main.js                App bootstrap; wires socket, scene, panels, controls
-    ar/                    SceneRoot (renderer/scene/lights), ARSession (immersive-ar)
+    ar/                    SceneRoot (renderer/scene/lights), ARSession (immersive-ar), CompassMarkers, WindIndicator
     terrain/               TerrainMesh — heightmap → displaced PlaneGeometry + procedural texture
     fire/                  CellularAutomata (Rothermel-lite) + FireOverlay (shader)
     evacuation/            Roads / Zones / Routes / Bottlenecks / Shelters / PopulationDots
