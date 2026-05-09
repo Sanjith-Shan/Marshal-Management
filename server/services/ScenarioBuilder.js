@@ -99,7 +99,7 @@ export const SCENARIOS = {
 export const DEFAULT_SCENARIO_ID = 'cedar';
 
 export const ScenarioBuilder = {
-  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID, roadNetwork = null, realHeightmap = null } = {}) {
+  build({ seed = 42, scenarioId = DEFAULT_SCENARIO_ID, roadNetwork = null, realHeightmap = null, perimeter = null } = {}) {
     const rng = mulberry32(seed);
     const preset = SCENARIOS[scenarioId] ?? SCENARIOS[DEFAULT_SCENARIO_ID];
 
@@ -135,6 +135,7 @@ export const ScenarioBuilder = {
       scenarioMeta: preset.meta || null,
       realTerrain: !!realHeightmap,
       realRoads: !!roadNetwork,
+      historicalPerimeter: perimeter || null,
       name: 'Cedar Corridor — San Diego County',
       gridSize: GRID,
       worldMeters: WORLD_M,

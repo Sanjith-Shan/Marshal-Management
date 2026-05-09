@@ -5,8 +5,8 @@
 
 import * as THREE from 'three';
 
-const TERRAIN_WORLD = 6;          // plane width = 6 scene units (~6 m tabletop)
-const TERRAIN_HEIGHT = 0.75;       // peak displacement
+const TERRAIN_WORLD = 9;          // plane width in scene units; bigger map = more legible at zoom-out
+const TERRAIN_HEIGHT = 1.0;       // peak displacement (scaled with TERRAIN_WORLD)
 const SEG = 159;                  // heightmap is 128, geometry segments slightly more for smooth edges
 
 export class TerrainMesh {

@@ -25,11 +25,15 @@ export class EvacuationPanel extends Panel {
       .filter(k => census.populations[k])
       .map(k => `<div style="display:flex;justify-content:space-between"><span>${census.populations[k].label}</span><span style="color:var(--accent-good)">${census.populations[k].population.toLocaleString()}</span></div>`)
       .join('');
+    const tractLine = census.tracts
+      ? `<div style="margin-top:5px;padding-top:5px;border-top:1px dashed rgba(94,234,141,0.18);font-size:10px;color:var(--text-dim)">${census.tracts.count} census tracts · median ${census.tracts.medianPop.toLocaleString()} residents · largest ${census.tracts.maxPop.toLocaleString()}</div>`
+      : '';
     el.innerHTML = `
       <div style="font-weight:700;letter-spacing:0.08em;color:var(--accent-good);margin-bottom:4px">
         REAL POPULATION (US Census ACS 2022)
       </div>
       ${items}
+      ${tractLine}
     `;
     el.style.display = 'block';
   }

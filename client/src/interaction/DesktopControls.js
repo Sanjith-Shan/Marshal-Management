@@ -9,7 +9,9 @@ export class DesktopControls {
     this.camera = camera;
     this.canvas = canvas;
     this.target = terrainGroup;
-    this.distance = 11;
+    this.distance = 14;            // initial camera distance
+    this.MIN_DIST = 2.0;
+    this.MAX_DIST = 70;
     this.azimuth = 0.6;            // rad
     this.elevation = 0.65;         // rad above horizon
     this.center = new THREE.Vector3(0, 0, 0);
@@ -64,7 +66,7 @@ export class DesktopControls {
     if (!this.enabled) return;
     e.preventDefault();
     this.distance *= (1 + e.deltaY * 0.0014);
-    this.distance = Math.max(3.5, Math.min(30, this.distance));
+    this.distance = Math.max(this.MIN_DIST, Math.min(this.MAX_DIST, this.distance));
   }
 
   pulseRotate(dx, dy) {
@@ -74,7 +76,7 @@ export class DesktopControls {
   }
 
   resetView() {
-    this.distance = 11;
+    this.distance = 14;
     this.azimuth = 0.6;
     this.elevation = 0.65;
     this.center.set(0, 0, 0);
@@ -89,8 +91,8 @@ export class DesktopControls {
     if (this.keys.has('KeyS')) this.center.addScaledVector(fwd, -speed);
     if (this.keys.has('KeyA')) this.center.addScaledVector(right, -speed);
     if (this.keys.has('KeyD')) this.center.addScaledVector(right, speed);
-    if (this.keys.has('KeyQ')) this.distance = Math.max(3.5, this.distance - speed * 1.2);
-    if (this.keys.has('KeyZ')) this.distance = Math.min(30, this.distance + speed * 1.2);
+    if (this.keys.has('KeyQ')) this.distance = Math.max(this.MIN_DIST, this.distance - speed * 2.4);
+    if (this.keys.has('KeyZ')) this.distance = Math.min(this.MAX_DIST, this.distance + speed * 2.4);
     if (this.keys.has('ArrowLeft')) this.azimuth += dt * 0.9;
     if (this.keys.has('ArrowRight')) this.azimuth -= dt * 0.9;
     if (this.keys.has('ArrowUp')) this.elevation = Math.min(1.45, this.elevation + dt * 0.6);

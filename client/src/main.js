@@ -15,6 +15,7 @@ import { ShelterMarker } from './evacuation/ShelterMarker.js';
 import { PopulationDots } from './evacuation/PopulationDots.js';
 import { ContraflowAnimator } from './evacuation/ContraflowAnimator.js';
 import { ProactiveOverlay } from './evacuation/ProactiveOverlay.js';
+import { PerimeterOverlay } from './evacuation/PerimeterOverlay.js';
 import { CompassMarkers } from './ar/CompassMarkers.js';
 import { WindIndicator } from './ar/WindIndicator.js';
 import { PanelManager } from './panels/PanelManager.js';
@@ -52,6 +53,7 @@ class App {
     this.proactive = null;
     this.compass = null;
     this.windInd = null;
+    this.perimeter = null;
 
     this._currentMode = 'MONITOR';
 
@@ -304,6 +306,9 @@ class App {
 
     this.compass = new CompassMarkers();
     sg.add(this.compass.group);
+
+    this.perimeter = new PerimeterOverlay(this.scenario, this.terrain);
+    sg.add(this.perimeter.group);
 
     this.windInd = new WindIndicator();
     sg.add(this.windInd.group);

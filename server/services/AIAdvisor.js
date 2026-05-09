@@ -147,8 +147,8 @@ export class AIAdvisor {
       lines.push(`- Top bottlenecks: ${top}`);
     }
     // Real-world context: ACS 2022 5-year population reference
-    if (s.census?.available && s.census.populations) {
-      const pops = s.census.populations;
+    if (s.census?.available) {
+      const pops = s.census.populations || {};
       const refs = ['sanDiegoCounty', 'sanDiegoCity', 'poway', 'escondido']
         .filter(k => pops[k])
         .map(k => `${pops[k].label} ${pops[k].population.toLocaleString()}`);
@@ -156,6 +156,10 @@ export class AIAdvisor {
         lines.push(``);
         lines.push(`REAL-WORLD POPULATION REFERENCE (US Census ACS 2022):`);
         lines.push(`- ${refs.join(' · ')}`);
+        if (s.census.tracts) {
+          const t = s.census.tracts;
+          lines.push(`- ${t.count} census tracts in San Diego County (median ${t.medianPop.toLocaleString()} residents/tract, max ${t.maxPop.toLocaleString()})`);
+        }
         lines.push(`- Synthetic scenario population (${s.evacuation.totalPopulation.toLocaleString()}) is scaled down for routing-engine performance.`);
       }
     }

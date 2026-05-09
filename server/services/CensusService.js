@@ -73,16 +73,59 @@ export class CensusService extends EventEmitter {
         console.warn(`[census] ${t.key} fetch failed:`, err.message);
       }
     }
-    if (anySuccess) {
-      this.current = { available: true, populations, fetchedAt: Date.now(), source: 'ACS 2022 5-year' };
+    // Tract-level: aggregate stats for all San Diego County tracts
+    let tracts = null;
+    try {
+      tracts = await this._fetchTracts(key);
+    } catch (err) {
+      console.warn('[census] tract fetch failed:', err.message);
+    }
+
+    if (anySuccess || tracts) {
+      this.current = {
+        available: true,
+        populations,
+        tracts,
+        fetchedAt: Date.now(),
+        source: 'ACS 2022 5-year',
+      };
       this.emit('update', this.current);
       const list = Object.values(populations)
         .map(p => `${p.label}: ${p.population.toLocaleString()}`)
         .join(' · ');
-      console.log(`[census] real population data loaded — ${list}`);
+      console.log(`[census] real population data loaded — ${list}${tracts ? ` · ${tracts.count} tracts (median ${tracts.medianPop.toLocaleString()})` : ''}`);
     } else {
       console.log('[census] no community data retrieved');
     }
+  }
+
+  async _fetchTracts(key) {
+    const params = new URLSearchParams();
+    params.set('get', `NAME,${POP_VAR}`);
+    params.set('for', 'tract:*');
+    params.set('in', 'state:06 county:073');
+    if (key) params.set('key', key);
+    const url = `${ACS_BASE}?${params.toString()}`;
+    const res = await fetch(url, { timeout: 12000 });
+    if (!res.ok) throw new Error(`census tract ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 2) return null;
+    const valueIdx = data[0].indexOf(POP_VAR);
+    const pops = [];
+    for (let i = 1; i < data.length; i++) {
+      const v = parseInt(data[i][valueIdx], 10);
+      if (Number.isFinite(v) && v >= 0) pops.push(v);
+    }
+    if (!pops.length) return null;
+    pops.sort((a, b) => a - b);
+    const total = pops.reduce((a, p) => a + p, 0);
+    return {
+      count: pops.length,
+      totalPop: total,
+      medianPop: pops[Math.floor(pops.length / 2)],
+      maxPop: pops[pops.length - 1],
+      minPop: pops[0],
+    };
   }
 
   _buildUrl(t, key) {

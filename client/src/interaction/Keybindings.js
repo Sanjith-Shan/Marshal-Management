@@ -53,6 +53,13 @@ export class Keybindings {
         this.hud.toggleTimeline(); break;
       case 'KeyP':
         this.socket.emit('action', { type: 'sim:toggle' }); break;
+      case 'KeyF':
+        // Toggle the historical fire perimeter overlay (NIFC 2003 Cedar etc.)
+        if (window.app?.perimeter) {
+          const visible = window.app.perimeter.toggle();
+          this.hud.showModeToast(visible ? 'Footprint: 2003 Cedar Fire (NIFC) ON' : 'Footprint: OFF');
+        }
+        break;
       case 'BracketRight':
         this.socket.emit('action', {
           type: 'time-jump',

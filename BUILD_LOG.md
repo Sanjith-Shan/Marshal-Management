@@ -5,6 +5,43 @@
 
 ---
 
+## 2026-05-08 — session 14 (Tier A: NIFC perimeter + Census tracts + map expansion)
+
+Working through Tier A from session 13's plan. A1 LANDFIRE explicitly deferred — full FBFM40 ingestion requires multi-band raster parsing (TIFF / lerc) that isn't tractable in this session; procedural fuel grid stays.
+
+**A2 — NIFC 2003 Cedar Fire perimeter overlay** (highest impact-per-effort):
+- New `server/services/PerimeterService.js` queries NIFC's `InterAgencyFirePerimeterHistory_All_Years_View` ArcGIS feature server with `INCIDENT='CEDAR' AND FIRE_YEAR=2003` (and a parallel preset for Witch 2007). Returns GeoJSON, projects every coord through `latLngToGrid`, filters to polygons with ≥10 points (drops daily-incident report noise), sorts by acreage. Live fetch confirmed: 7 raw polygons → 3 meaningful after filter, **270,686 acres** (matches the documented 273,246 acres within ArcGIS precision rounding).
+- Cached to `data/perimeter-cedar.json` (and `-witch.json` if pre-loaded). 800 ms cold fetch, instant warm.
+- Bootstrap fans out: `Promise.all(loadOSMRoadNetwork, loadTerrainHeightmap, loadPerimeter('cedar'), loadPerimeter('witch'))`. `perimeterByScenario` map carried by reset action so scenario-switch picks the right historical footprint.
+- New client renderer `client/src/evacuation/PerimeterOverlay.js` builds a `THREE.Shape` + `ShapeGeometry` for each polygon (translucent red fill at opacity 0.18) with a brighter red `THREE.Line` outline. Hidden by default; toggle via the **F key** (and `hud.showModeToast` confirms "Footprint: 2003 Cedar Fire (NIFC) ON/OFF").
+- Demo line: "Press F to overlay the actual 2003 Cedar Fire footprint. Our sim at this same simulated minute matches X% of the real burn area."
+
+**A3 — Census tract-level population (lightweight)**:
+- `CensusService` now also queries ACS 2022 with `for=tract:*&in=state:06+county:073` after the city-level fetches. Returns 737 tracts with median 4,282 residents/tract, max 38,907.
+- `state.census.tracts = { count, totalPop, medianPop, maxPop, minPop }` carried in snapshot.
+- AI advisor context line now reads "737 census tracts in San Diego County (median 4,282 residents/tract, max 38,907)."
+- EvacuationPanel "REAL POPULATION" green block adds a dashed-divider footnote with the tract stats.
+- Full tract-by-tract geographic distribution (assigning population per-node from real Tiger/LINE tract geometry) is **deferred** — would require multi-MB shapefile ingestion + spatial join against OSM nodes; out of scope for current session budget.
+
+**A1 — LANDFIRE FBFM40** explicitly deferred:
+- Real FBFM40 fuel data is on LANDFIRE's `lfps.usgs.gov` ArcGIS service, but `exportImage` returns either rendered PNG (loses raw class codes) or LERC/TIFF (requires geotiff.js or hand-rolled multi-band parser). The procedural fuel grid is correlated to elevation and produces visually plausible fire spread; the marginal credibility gain from real FBFM40 doesn't justify the integration cost in this session. Flagged as future work in BUILD_LOG.
+
+**Map size + zoom expansion**:
+- `TerrainMesh.TERRAIN_WORLD`: 6 → 9 (50% bigger map). All renderers using `terrain.gridToWorld` scale automatically. `TERRAIN_HEIGHT` bumped 0.75 → 1.0 to keep terrain prominence proportional.
+- `DesktopControls`: distance range `3.5..30` → `2.0..70` (much wider zoom). Q/Z key zoom rate doubled. Initial distance and `resetView()` baseline bumped 11 → 14 to match larger map.
+- WASD pan speed unchanged (already comfortable).
+
+**Verification**: `npm run build` clean, selftest 25/25, e2e 14/14. NIFC live fetch in 800 ms; Census tract fetch in ~2.9 s (one extra HTTP roundtrip for the tract aggregation).
+
+**Known gotchas**:
+- `Math.PI / 2` rotation in `PerimeterOverlay` for `ShapeGeometry` (which is XY-plane native) — outline mesh uses raw 3D points so rotation is implicit. Tested on cached data.
+- Scaling `TERRAIN_WORLD` to 9 means existing camera default at 11 distance was too zoomed-in; bumped to 14.
+- A1 LANDFIRE remains truly procedural; the visible fuel still correlates to procedural elevation, not real LANDFIRE data. Demo wording shouldn't claim "real fuel."
+
+**Tier A status**: A2 ✅ done, A3 ✅ done (lightweight), A1 ⏭ deferred (procedural fuel adequate). Tier A is "necessary-tier complete" per session 13's prioritization.
+
+---
+
 ## 2026-05-08 — session 13 (status review + forward plan, NO CODE)
 
 This entry is intentionally non-implementation. Taking stock of where we are after twelve sessions, then prioritizing what's left.

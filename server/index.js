@@ -15,6 +15,7 @@ import { FIRMSService } from './services/FIRMSService.js';
 import { CensusService } from './services/CensusService.js';
 import { loadOSMRoadNetwork } from './services/OSMService.js';
 import { loadTerrainHeightmap } from './services/TerrainService.js';
+import { loadPerimeter } from './services/PerimeterService.js';
 import { ScenarioBuilder, SCENARIOS, DEFAULT_SCENARIO_ID } from './services/ScenarioBuilder.js';
 
 dotenv.config();
@@ -36,21 +37,33 @@ const io = new SocketIO(httpServer, {
 
 // --------------------- bootstrap ---------------------
 
-// Real-data fan-out: kick off OSM road fetch + USGS DEM in parallel.
-// Both have on-disk caches, so warm starts are instant. Both fall back
-// to procedural on failure.
+// Real-data fan-out: OSM roads + USGS DEM + NIFC historical perimeters
+// in parallel. All have on-disk caches; warm starts are instant. All fall
+// back to procedural / null on failure.
 let osmNetwork = null;
 let realHeightmap = null;
+const perimeterByScenario = {};
 try {
-  [osmNetwork, realHeightmap] = await Promise.all([
+  const [osm, dem, cedarPerim, witchPerim] = await Promise.all([
     loadOSMRoadNetwork().catch(err => { console.warn('[osm] load threw:', err.message); return null; }),
     loadTerrainHeightmap().catch(err => { console.warn('[dem] load threw:', err.message); return null; }),
+    loadPerimeter('cedar').catch(err => { console.warn('[perim] cedar threw:', err.message); return null; }),
+    loadPerimeter('witch').catch(err => { console.warn('[perim] witch threw:', err.message); return null; }),
   ]);
+  osmNetwork = osm;
+  realHeightmap = dem;
+  if (cedarPerim) perimeterByScenario.cedar = cedarPerim;
+  if (witchPerim) perimeterByScenario.witch = witchPerim;
 } catch (err) {
   console.warn('[bootstrap] real-data load failed:', err.message);
 }
 
-const scenario = ScenarioBuilder.build({ seed: 42, roadNetwork: osmNetwork, realHeightmap });
+const scenario = ScenarioBuilder.build({
+  seed: 42,
+  roadNetwork: osmNetwork,
+  realHeightmap,
+  perimeter: perimeterByScenario.cedar,
+});
 const state = new StateManager(scenario);
 const evac = new EvacuationEngine(state);
 const weather = new WeatherService();
@@ -223,8 +236,9 @@ async function handleAction(msg, socket) {
       state.resetScenario(ScenarioBuilder.build({
         seed: state.scenario.seed,
         scenarioId: nextId,
-        roadNetwork: osmNetwork,    // reuse cached OSM if loaded
-        realHeightmap,              // reuse cached DEM if loaded
+        roadNetwork: osmNetwork,
+        realHeightmap,
+        perimeter: perimeterByScenario[nextId] || null,
       }));
       break;
     }

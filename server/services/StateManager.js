@@ -79,6 +79,7 @@ export class StateManager extends EventEmitter {
       scenarioId: this.scenario.scenarioId,
       scenarioName: this.scenario.scenarioName,
       scenarioMeta: this.scenario.scenarioMeta,
+      historicalPerimeter: this.scenario.historicalPerimeter,
       name: this.scenario.name,
       gridSize: this.scenario.gridSize,
       worldMeters: this.scenario.worldMeters,
