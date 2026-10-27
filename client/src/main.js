@@ -18,6 +18,7 @@ import { ProactiveOverlay } from './evacuation/ProactiveOverlay.js';
 import { PerimeterOverlay } from './evacuation/PerimeterOverlay.js';
 import { CompassMarkers } from './ar/CompassMarkers.js';
 import { WindIndicator } from './ar/WindIndicator.js';
+import { ARPanels } from './ar/ARPanels.js';
 import { PanelManager } from './panels/PanelManager.js';
 import { Keybindings } from './interaction/Keybindings.js';
 import { HUD } from './ui/HUD.js';
@@ -25,11 +26,17 @@ import { HUD } from './ui/HUD.js';
 class App {
   constructor() {
     this.canvas = document.getElementById('three-canvas');
-    // Polling-first: Quest browser chokes on WebSocket upgrade through Vite's
-    // HTTPS proxy with the basic-ssl cert (server logs show repeated
-    // connect/disconnect cycles otherwise). Polling works through any HTTPS
-    // proxy. socket.io will still try to upgrade to WS where it works.
-    this.socket = socketIO({ path: '/socket.io', transports: ['polling', 'websocket'] });
+    // Polling-only: Quest browser chokes on WebSocket upgrade through Vite's
+    // HTTPS proxy with the basic-ssl cert — server logs show repeated
+    // connect/disconnect cycles when WS is allowed (polling succeeds, then
+    // the upgrade attempt drops the connection). Forcing transports=['polling']
+    // and upgrade=false keeps the connection alive on Quest. Desktop and
+    // production HTTPS work fine on polling too; the latency cost is small.
+    this.socket = socketIO({
+      path: '/socket.io',
+      transports: ['polling'],
+      upgrade: false,
+    });
 
     this.scenario = null;
     this.snapshot = null;
@@ -61,10 +68,12 @@ class App {
     this._currentMode = 'MONITOR';
 
     this.panels = new PanelManager(this.socket);
+    this.arPanels = new ARPanels(this.scene.scene);
     this.hud = new HUD(this.socket, this.panels);
     this.keys = new Keybindings(this.socket, this.hud, this.panels);
     this.desktop = new DesktopControls(this.scene.camera, this.canvas, this.scene.terrainGroup);
     this.ar = new ARSession(this.scene, this.canvas);
+    this.ar.setPanels(this.arPanels);
 
     this._wireSocket();
     this._wireUI();
@@ -97,6 +106,8 @@ class App {
         if (xrBtn && !xrBtn.classList.contains('unsupported')) {
           xrBtn.classList.remove('disabled');
           xrBtn.title = 'Enter immersive AR (Quest 3, requires user gesture)';
+          const span = xrBtn.querySelector('span:last-child');
+          if (span) span.textContent = 'Enter AR';
         }
       } catch (err) {
         const msg = `_buildWorld failed: ${err?.message || err}\n${err?.stack || ''}`;
@@ -108,6 +119,7 @@ class App {
         this.hud.setScenarioStart(scn.scenarioMeta);
         this.hud.setRealDataBadge(scn);
         this.panels.setScenarioContext(scn);
+        this.arPanels.setScenarioContext(scn);
       } catch (err) {
         if (typeof window.__qlog === 'function') window.__qlog('post-build setup failed: ' + err.message);
       }
@@ -117,6 +129,7 @@ class App {
       this.snapshot = snap;
       this.hud.applySnapshot(snap);
       this.panels.applySnapshot(snap);
+      this.arPanels.applySnapshot(snap);
       this._applyEvacuationToScene(snap);
       if (this.fireCA && snap.weather) this.fireCA.setWind(snap.weather.windDeg, snap.weather.windKph);
       if (this.windInd && snap.weather) this.windInd.setWind(snap.weather.windDeg, snap.weather.windKph, snap.weather.redFlag);
@@ -135,6 +148,7 @@ class App {
       this._maybeSnapCA(simTimeMin);
       this._refreshFireBlockedEdges(simTimeMin);
       this.panels.setSimTime(simTimeMin);
+      this.arPanels.setSimTime(simTimeMin);
     });
 
     this.socket.on('time-fast-forward', ({ steps, targetMin }) => {
@@ -180,6 +194,7 @@ class App {
 
     this.socket.on('weather', (w) => {
       this.panels.updateWeather(w);
+      this.arPanels.updateWeather(w);
       if (this.fireCA) this.fireCA.setWind(w.windDeg, w.windKph);
       if (this.windInd) this.windInd.setWind(w.windDeg, w.windKph, w.redFlag);
       this.hud.setWindStatus(w);
@@ -190,11 +205,15 @@ class App {
       this._onModeChange(m);
     });
 
-    this.socket.on('panels', (panels) => this.panels.applyVisibility(panels));
+    this.socket.on('panels', (panels) => {
+      this.panels.applyVisibility(panels);
+      this.arPanels.setVisibility(panels);
+    });
 
     this.socket.on('evacuation', (ev) => {
       this.snapshot = { ...(this.snapshot || {}), evacuation: ev };
       this.panels.updateEvacuation(ev);
+      this.arPanels.updateEvacuation(ev);
       this._applyEvacuationToScene(this.snapshot);
       if (this._currentMode === 'EVACUATE') {
         this.hud.updateEvacBanner({ ...this.snapshot, populations: this.scenario?.populations });
@@ -203,6 +222,7 @@ class App {
 
     this.socket.on('advisor', (msg) => {
       this.panels.appendAdvisor(msg);
+      this.arPanels.appendAdvisor(msg);
       if (this.proactive) this.proactive.notify(msg);
     });
 
@@ -251,8 +271,15 @@ class App {
     const xrBtn = document.getElementById('btn-xr');
     xrBtn.classList.add('disabled');
     xrBtn.title = 'Loading scenario — Enter AR will activate when ready';
+    const setBtnLabel = (txt) => {
+      const span = xrBtn.querySelector('span:last-child');
+      if (span) span.textContent = txt; else xrBtn.textContent = txt;
+    };
+    setBtnLabel('AR · loading…');
+    // Force-click handler regardless of "disabled" class so we can attempt
+    // session entry even if the support check returned false (some Quest
+    // browser builds report unsupported until the first user gesture).
     xrBtn.addEventListener('click', () => {
-      if (xrBtn.classList.contains('disabled')) return;
       this.ar.enter();
     });
     this.ar.on('enter', () => {
@@ -564,15 +591,19 @@ class App {
 
   _raf() {
     const renderer = this.scene.renderer;
-    renderer.setAnimationLoop((t) => this._frame(t));
+    // setAnimationLoop callback signature is (time, frame?). The XRFrame is
+    // only valid inside the callback — we have to do hit-test queries here,
+    // not stash the frame and call later.
+    renderer.setAnimationLoop((t, frame) => this._frame(t, frame));
   }
 
-  _frame(t) {
+  _frame(t, frame) {
     const dt = this.scene.clock.getDelta();
     // In AR, three.js drives the camera from the headset pose — running
     // DesktopControls would mutate the (now-unused) perspective camera
     // and create a jolt when exiting AR. Skip it.
     if (!this.ar.active) this.desktop.update(dt);
+    if (this.ar.active && frame) this.ar.updateXRFrame(frame);
 
     if (this.fireCA && !this.ar.active) {
       this.fireCA.step(dt, this.scene.camera);

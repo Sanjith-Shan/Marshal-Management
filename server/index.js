@@ -44,7 +44,18 @@ app.use(express.static(path.resolve(__dirname, '../dist')));
 
 const httpServer = createServer(app);
 const io = new SocketIO(httpServer, {
-  cors: { origin: '*' }
+  cors: { origin: '*' },
+  // Default maxHttpBufferSize is 1 MB. The initial `scenario` payload bundles
+  // 34k OSM nodes + 41k edges + 128² heightmap + fuel grid, easily 5–20 MB.
+  // On polling-only transports (Quest browser via Vite basic-ssl proxy, see
+  // client/src/main.js) packets above the buffer are silently dropped — the
+  // socket stays "connected" but the client never receives the scenario, so
+  // the world never builds and Enter AR stays locked. 64 MB headroom.
+  maxHttpBufferSize: 64 * 1024 * 1024,
+  // Quest polling roundtrip can be slow; bump the inactivity window so the
+  // server doesn't disconnect mid-handshake while a large scenario is in flight.
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 // --------------------- bootstrap ---------------------

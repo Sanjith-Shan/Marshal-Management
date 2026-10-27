@@ -5,6 +5,46 @@
 
 ---
 
+## 2026-05-09 — Hardware reconnect fix: auto-discover Mac on hotspot
+
+UNO Q couldn't reach the Marshal server. Diagnosis: iPhone hotspot DHCP
+handed the Mac `172.20.10.2` this session, but `/home/arduino/socat-marshal.sh`
+on the UNO Q hardcoded `172.20.10.8` from the previous session (commit
+`e3c8c55`). socat was happily forwarding container traffic to a dead host.
+
+Fix: rewrote the host script to auto-discover the Mac by scanning the /28
+for a host that returns a Socket.IO handshake (`0{` prefix). Skips own IP
+and the iPhone gateway. Falls back to `MAC_IP=…` env override.
+
+- Hot-restarted socat targeting `172.20.10.2`; verified handshake from
+  `172.20.0.1:3000` inside the App Lab container path.
+- New script versioned at `arduino/marshal_board_q/host/socat-marshal.sh`
+  and pushed to `/home/arduino/socat-marshal.sh` on the UNO Q (will run
+  via cron `@reboot`).
+- Updated `python/main.py` comment to reflect auto-discovery instead of
+  the stale hardcoded IP.
+
+Lesson: the cron script's `MAC_IP` default was the failure mode, not the
+script existing. Anything keyed to hotspot IP must rediscover, not cache.
+
+---
+
+## 2026-05-09 — AR overhaul: hit-test placement + 3D-native panels
+
+User reported AR mode showed "a big grid but nothing actually there" and DOM panels were invisible (Quest passthrough doesn't render dom-overlay reliably on self-signed origins). Three changes:
+
+- **`SceneRoot.js`**: `GridHelper` was added to scene root and never hidden. At scale 1 it's a 16 m square that dominates the AR room view — that's the "big grid" the user saw. Stored as `this.grid` and toggled in `setRenderMode`.
+- **`ARSession.js`**: rewrote with WebXR `hit-test`. Now creates a reticle mesh (cyan ring + dot) that follows the headset's forward ray onto detected surfaces. Until the user pinches/triggers `select`, the terrain rides the reticle as a live preview; `select` locks placement. Default scale dropped from 0.35 (4.2 m wide — bigger than most rooms) to 0.12 (≈1.4 m, tabletop-sized). Required-features now include `hit-test`; falls back through 4 attempt configs.
+- **`ARPanels.js` (new)**: 3D-native versions of the four DOM panels. Each is a 0.5×0.375 m `PlaneGeometry` with a 1024×768 `CanvasTexture`. Arranged in a horizontal arc (–55°/–22°/+22°/+55°) at chest height, all `lookAt(user)`. Mirrors the same data hooks as `PanelManager` (`updateWeather`, `updateEvacuation`, `appendAdvisor`, `applySnapshot`) — `main.js` calls them in parallel. Visibility wired through the existing `panels` socket event so the same hardware/keyboard/HUD toggles work in AR.
+
+`ARSession.setPanels(arPanels)` flips the AR group on/off with the session lifecycle. The frame callback in `main.js` now passes `XRFrame` into `ARSession.updateXRFrame(frame)` for hit-test queries.
+
+Verified: `npm run build` clean, `_selftest` 25/25, `_e2e` 14/14.
+
+Still untested on Quest hardware — Tier 1 of the punch list remains the validation step.
+
+---
+
 ## Current state (snapshot)
 
 - **Desktop demo works end-to-end.** `npm run dev` → http://localhost:5173. Real OSM, DEM, NWS, Census, FIRMS, NIFC, OpenAI live.

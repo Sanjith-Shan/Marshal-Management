@@ -76,12 +76,14 @@ export class SceneRoot {
     this.table.position.y = -0.02;
     this.scene.add(this.table);
 
-    // Faint grid for orientation
-    const grid = new THREE.GridHelper(16, 16, 0x1a3a5a, 0x0a1a2a);
-    grid.material.transparent = true;
-    grid.material.opacity = 0.35;
-    grid.position.y = -0.015;
-    this.scene.add(grid);
+    // Faint grid for orientation. Stored so AR mode can hide it — at scene
+    // scale (1 unit = 1 m) the 16-unit grid is a 16 m square that dominates
+    // the passthrough room and reads as "the big grid with nothing on it."
+    this.grid = new THREE.GridHelper(16, 16, 0x1a3a5a, 0x0a1a2a);
+    this.grid.material.transparent = true;
+    this.grid.material.opacity = 0.35;
+    this.grid.position.y = -0.015;
+    this.scene.add(this.grid);
 
     this.clock = new THREE.Clock();
 
@@ -104,6 +106,7 @@ export class SceneRoot {
       this.scene.fog = null;
       this.renderer.setClearColor(0x000000, 0);
       this.table.visible = false;
+      this.grid.visible = false;
     } else {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = 1.05;
@@ -111,6 +114,7 @@ export class SceneRoot {
       this.scene.fog = new THREE.Fog('#070a10', 18, 50);
       this.renderer.setClearColor(0x070a10, 1);
       this.table.visible = true;
+      this.grid.visible = true;
     }
   }
 

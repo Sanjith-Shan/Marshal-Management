@@ -26,12 +26,15 @@ from arduino.app_utils import App, Bridge
 
 # App Lab runs this Python in a Docker container whose bridge subnet
 # (172.20.0.0/16) overlaps with the iPhone hotspot subnet (172.20.10.0/28),
-# so the container can't reach the Mac directly — traffic to 172.20.10.8 is
-# captured by the bridge route and dropped. Workaround: a `socat` forwarder
-# runs on the UNO Q host listening on its bridge gateway 172.20.0.1:3000 and
-# proxies to the Mac's 172.20.10.8:3000. The container connects to the
-# gateway (always reachable) and the host hops it onto WiFi.
-# Start the forwarder with: adb shell 'nohup socat TCP4-LISTEN:3000,fork,reuseaddr TCP4:172.20.10.8:3000 </dev/null >/tmp/socat.log 2>&1 &'
+# so the container can't reach the Mac directly — traffic to a 172.20.10.x
+# host is captured by the bridge route and dropped. Workaround: a `socat`
+# forwarder runs on the UNO Q host listening on its bridge gateway
+# 172.20.0.1:3000 and proxies to the Mac's current 172.20.10.x:3000. The
+# container connects to the gateway (always reachable) and the host hops it
+# onto WiFi. The host script (arduino/marshal_board_q/host/socat-marshal.sh,
+# installed at /home/arduino/socat-marshal.sh, run from cron @reboot)
+# auto-discovers the Mac's current lease — the iPhone hands out a new IP each
+# reconnect, so a hardcoded target goes stale fast.
 DEFAULT_SERVER_URL = "http://172.20.0.1:3000"
 SERVER_URL = os.environ.get("SERVER_URL", DEFAULT_SERVER_URL)
 
@@ -122,10 +125,14 @@ def _connect_loop():
             if not probed_ok:
                 probed_ok = _probe_server()
             try:
-                # Default transports = polling+websocket. Lets Socket.IO negotiate
-                # the upgrade rather than forcing websocket-only (which can fail
-                # silently if the adb tunnel mishandles the WS upgrade frame).
-                sio.connect(SERVER_URL)
+                # Polling-only: WS upgrade through the App Lab container's
+                # bridge → socat host forwarder is unreliable. Polling holds
+                # a stable connection through any plain TCP forwarder. This
+                # mirrors the browser client (client/src/main.js), which has
+                # the same WS-upgrade fragility through the Vite basic-ssl
+                # proxy on Quest. Server-side maxHttpBufferSize was bumped to
+                # 64 MB so the initial scenario payload no longer truncates.
+                sio.connect(SERVER_URL, transports=["polling"])
             except Exception as e:
                 print(f"[sio] connect failed: {e}")
         time.sleep(2)
