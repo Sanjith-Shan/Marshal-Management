@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { bfsPolyline, orientPolyline } from './_polyline.js';
+import { dotTexture } from '../utils/dotTexture.js';
 
 const DOTS_PER_PERSON = 0.01;     // 100 people = 1 dot
 const MIN_DOTS_PER_NODE = 2;
@@ -51,8 +52,10 @@ export class PopulationDots {
       const geom = new THREE.BufferGeometry();
       geom.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       const mat = new THREE.PointsMaterial({
-        color: 0xeaf2ff,
-        size: 0.022,
+        color: 0xdfeaf7,
+        size: 0.03,
+        map: dotTexture(),
+        alphaTest: 0.05,
         transparent: true,
         opacity: 0.75,
         depthWrite: false
@@ -184,3 +187,4 @@ export class PopulationDots {
     }
   }
 }
+

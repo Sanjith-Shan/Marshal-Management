@@ -32,14 +32,14 @@ const ANGLES_DEG = {
 };
 
 const STYLE = {
-  bg: 'rgba(8, 12, 22, 0.92)',
-  border: 'rgba(108, 184, 255, 0.55)',
-  title: '#6cb8ff',
-  text: '#e8eef7',
-  dim: '#8b96a6',
-  warn: '#ffb066',
-  hot: '#ff6f6f',
-  good: '#7ce58a',
+  bg: 'rgba(14, 19, 26, 0.9)',
+  border: 'rgba(255, 255, 255, 0.16)',
+  title: '#e9eef4',
+  text: '#e9eef4',
+  dim: '#8d97a5',
+  warn: '#f4a43a',
+  hot: '#ff5b4f',
+  good: '#3fcf8e',
 };
 
 export class ARPanels {
@@ -193,12 +193,12 @@ export class ARPanels {
     ctx.stroke();
     // Title bar
     ctx.fillStyle = STYLE.title;
-    ctx.font = '700 38px ui-monospace, monospace';
+    ctx.font = '600 36px Inter, system-ui, sans-serif';
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
     ctx.fillText(title, 36, 32);
     // Underline
-    ctx.strokeStyle = 'rgba(108, 184, 255, 0.35)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(36, 88);
@@ -212,7 +212,7 @@ export class ARPanels {
     const left = 50;
     if (!w) {
       ctx.fillStyle = STYLE.dim;
-      ctx.font = '24px ui-monospace, monospace';
+      ctx.font = '24px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('Awaiting NWS feed…', left, y);
       return;
     }
@@ -228,7 +228,7 @@ export class ARPanels {
       ['Temp',     `${tempF}°F`,     STYLE.text],
       ['Source',   `${w.station || w.source || 'NWS'}`, STYLE.dim],
     ];
-    ctx.font = '600 26px ui-monospace, monospace';
+    ctx.font = '600 26px "JetBrains Mono", ui-monospace, monospace';
     for (const [k, v, color] of rows) {
       ctx.fillStyle = STYLE.dim;
       ctx.fillText(k.padEnd(10), left, y);
@@ -239,14 +239,14 @@ export class ARPanels {
     y += 20;
     if (w.redFlag) {
       ctx.fillStyle = STYLE.hot;
-      ctx.font = '700 34px ui-monospace, monospace';
+      ctx.font = '700 34px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('⚑ RED FLAG WARNING', left, y);
-      ctx.font = '500 22px ui-monospace, monospace';
+      ctx.font = '500 22px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillStyle = STYLE.dim;
       ctx.fillText('Aggressive spotting + spread expected.', left, y + 44);
     } else {
       ctx.fillStyle = STYLE.good;
-      ctx.font = '600 24px ui-monospace, monospace';
+      ctx.font = '600 24px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('No red-flag advisory active.', left, y);
     }
   }
@@ -257,19 +257,19 @@ export class ARPanels {
     const left = 50;
     if (!ev) {
       ctx.fillStyle = STYLE.dim;
-      ctx.font = '24px ui-monospace, monospace';
+      ctx.font = '24px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('No evacuation engine output yet.', left, y);
       ctx.fillText('Press EVACUATE on the board (E) to compute routes.', left, y + 36);
       return;
     }
     // Overview row
-    ctx.font = '600 22px ui-monospace, monospace';
+    ctx.font = '600 22px "JetBrains Mono", ui-monospace, monospace';
     ctx.fillStyle = STYLE.dim;
     ctx.fillText(`T+${formatMin(this._simTimeMin)} · last run T+${formatMin(ev.lastRunSimMin || 0)}`, left, y);
     y += 36;
 
     // Zones
-    ctx.font = '700 24px ui-monospace, monospace';
+    ctx.font = '700 24px "JetBrains Mono", ui-monospace, monospace';
     const zones = (ev.zones || []).slice(0, 6);
     for (const z of zones) {
       const lvlColor = z.level >= 3 ? STYLE.hot : z.level === 2 ? STYLE.warn : STYLE.title;
@@ -280,18 +280,18 @@ export class ARPanels {
       const name = (z.name || z.id || '').padEnd(20).slice(0, 20);
       ctx.fillText(name, left + 130, y);
       ctx.fillStyle = STYLE.dim;
-      ctx.font = '500 20px ui-monospace, monospace';
+      ctx.font = '500 20px "JetBrains Mono", ui-monospace, monospace';
       const pop = z.population || 0;
       const eta = z.evacMin ? `${Math.round(z.evacMin)}m` : '—';
       const margin = z.safetyMargin != null ? `${Math.round(z.safetyMargin)}m mar` : '';
       ctx.fillText(`pop ${pop}  evac ${eta}  ${margin}`, left + 130, y + 28);
       y += 60;
-      ctx.font = '700 24px ui-monospace, monospace';
+      ctx.font = '700 24px "JetBrains Mono", ui-monospace, monospace';
       if (y > canvas.height - 80) break;
     }
     if (zones.length === 0) {
       ctx.fillStyle = STYLE.dim;
-      ctx.font = '24px ui-monospace, monospace';
+      ctx.font = '24px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('No zones declared yet.', left, y);
     }
   }
@@ -302,11 +302,11 @@ export class ARPanels {
     const right = canvas.width - 50;
     if (this._advisor.length === 0) {
       ctx.fillStyle = STYLE.dim;
-      ctx.font = '24px ui-monospace, monospace';
+      ctx.font = '24px "JetBrains Mono", ui-monospace, monospace';
       ctx.fillText('AI advisor idle. Hold push-to-talk to query.', left, y);
       return;
     }
-    ctx.font = '500 22px ui-monospace, monospace';
+    ctx.font = '500 22px "JetBrains Mono", ui-monospace, monospace';
     const recent = this._advisor.slice(-6);
     for (const m of recent) {
       const sev = m?.severity || 'info';
@@ -329,14 +329,14 @@ export class ARPanels {
     // Four "feed" tiles in a 2×2 grid
     const cols = 2, rows = 2;
     const tw = w / cols - 16, th = h / rows - 16;
-    ctx.font = '600 20px ui-monospace, monospace';
+    ctx.font = '600 20px "JetBrains Mono", ui-monospace, monospace';
     const labels = ['CAM-1 · Cedar Creek', 'CAM-2 · Scripps Ranch', 'CAM-3 · I-15 ramp', 'CAM-4 · Poway HS'];
     for (let i = 0; i < 4; i++) {
       const cx = left + (i % 2) * (tw + 16);
       const cy = top + Math.floor(i / 2) * (th + 16);
-      ctx.fillStyle = 'rgba(20, 28, 42, 0.85)';
+      ctx.fillStyle = 'rgba(14, 19, 26, 0.85)';
       ctx.fillRect(cx, cy, tw, th);
-      ctx.strokeStyle = 'rgba(108, 184, 255, 0.25)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
       ctx.lineWidth = 2;
       ctx.strokeRect(cx, cy, tw, th);
       // Static-y noise dots

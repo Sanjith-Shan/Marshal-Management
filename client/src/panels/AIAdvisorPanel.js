@@ -5,7 +5,7 @@ const speech = (typeof window !== 'undefined') ? window.speechSynthesis : null;
 
 export class AIAdvisorPanel extends Panel {
   constructor(layer, position, socket) {
-    super(layer, 'AI STRATEGIC ADVISOR', position);
+    super(layer, 'Advisor', position);
     this.socket = socket;
     this.voiceEnabled = (typeof localStorage !== 'undefined')
       ? localStorage.getItem(VOICE_PREF_KEY) !== '0'

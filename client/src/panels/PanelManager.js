@@ -13,10 +13,10 @@ export class PanelManager {
     this.socket = socket;
     this.layer = document.getElementById('panels-layer');
     this.panels = {
-      weather: new WeatherPanel(this.layer, { x: 18, y: 18 }),
-      evacuation: new EvacuationPanel(this.layer, { x: 18, y: 320 }),
-      advisor: new AIAdvisorPanel(this.layer, { x: 'right:18', y: 18 }, socket),
-      video: new VideoFeedPanel(this.layer, { x: 'right:18', y: 380 }),
+      weather: new WeatherPanel(this.layer, { x: 'right:0', y: 0 }),
+      evacuation: new EvacuationPanel(this.layer, { x: 0, y: 0 }),
+      advisor: new AIAdvisorPanel(this.layer, { x: 'right:0', y: 0 }, socket),
+      video: new VideoFeedPanel(this.layer, { x: 'right:0', y: 0 }),
     };
     for (const p of Object.values(this.panels)) p.hide();
     this._wireBottomBar();

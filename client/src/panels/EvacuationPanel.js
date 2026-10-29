@@ -2,20 +2,20 @@ import { Panel } from './Panel.js';
 
 export class EvacuationPanel extends Panel {
   constructor(layer, position) {
-    super(layer, 'EVACUATION STATUS', position);
+    super(layer, 'Evacuation', position);
     this._roads = { motorway: null, trunk: null };  // populated from scenario
     this._lastEv = null;
     this._simTimeMin = 0;
     this.body.innerHTML = `
-      <div id="ev-historical" style="display:none;background:rgba(255,184,107,0.06);border-left:2px solid var(--accent-warm);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.45"></div>
-      <div id="ev-census" style="display:none;background:rgba(94,234,141,0.06);border-left:2px solid var(--accent-good);padding:8px 10px;margin-bottom:10px;border-radius:0 6px 6px 0;font-size:11px;line-height:1.55"></div>
+      <div id="ev-historical" class="context-line" style="display:none"></div>
+      <div id="ev-census" style="display:none"></div>
       <div id="ev-overview" class="metric-grid"></div>
-      <h3>ZONES</h3>
+      <h3>Zones</h3>
       <div id="ev-zones"></div>
-      <h3>SHELTERS</h3>
+      <h3>Shelters</h3>
       <div id="ev-shelters"></div>
-      <h3>BOTTLENECKS</h3>
-      <div id="ev-bot" style="font-size:11px;color:var(--text-dim)">—</div>
+      <h3>Bottlenecks</h3>
+      <div id="ev-bot"></div>
     `;
   }
   setCensusContext(census) {
@@ -37,7 +37,7 @@ export class EvacuationPanel extends Panel {
       ${items}
       ${tractLine}
     `;
-    el.style.display = 'block';
+    el.style.display = 'none';
   }
 
   setScenarioRoads(scenario) {
@@ -62,20 +62,9 @@ export class EvacuationPanel extends Panel {
       el.style.display = 'none';
       return;
     }
-    const stats = [];
-    if (meta.acresBurned)    stats.push(`${meta.acresBurned.toLocaleString()} acres`);
-    if (meta.fatalities)     stats.push(`${meta.fatalities} fatalities`);
-    if (meta.homesDestroyed) stats.push(`${meta.homesDestroyed.toLocaleString()} homes lost`);
-    if (meta.evacuated)      stats.push(`${meta.evacuated.toLocaleString()} evacuated`);
-    el.innerHTML = `
-      <div style="font-weight:700;letter-spacing:0.08em;color:var(--accent-warm);margin-bottom:4px">
-        ${scenario.scenarioName} · ${meta.realDate}
-      </div>
-      <div style="color:var(--text-dim);margin-bottom:5px">${stats.join(' · ')}</div>
-      <div>${meta.summary || ''}</div>
-      ${meta.windDuringEvent ? `<div style="margin-top:4px;color:var(--text-dim)">Wind: ${meta.windDuringEvent}</div>` : ''}
-    `;
-    el.style.display = 'block';
+    const acres = meta.acresBurned ? `${meta.acresBurned.toLocaleString()} acres` : '';
+    el.innerHTML = `<span><b>${scenario.scenarioName}</b></span><span>${acres}</span>`;
+    el.style.display = 'flex';
   }
   setSimTime(min) {
     this._simTimeMin = min;
@@ -116,12 +105,12 @@ export class EvacuationPanel extends Panel {
     const hasActiveZones = ev.zones.some(z => z.level >= 2);
     let evacPct;
     if (!hasActiveZones) {
-      evacPct = ev.totalEvacuated > 0
-        ? Math.min(99, Math.round(ev.totalEvacuated / ev.totalPopulation * 100))
-        : null;
+      // Nobody has been ordered out yet; routed capacity is not people moved.
+      evacPct = 0;
     } else {
       evacPct = Math.round(totalEvacPop / Math.max(1, totalPop) * 100);
     }
+    this.lastEvacPct = evacPct;
     const evacDisplay = evacPct == null ? '—'
       : `<span class="${evacPct >= 60 ? 'good' : evacPct >= 30 ? '' : 'bad'}">${evacPct}%</span>`;
 
@@ -137,10 +126,10 @@ export class EvacuationPanel extends Panel {
       : `<span>0</span>`;
 
     el.innerHTML = `
-      <div class="metric"><span class="metric-label">Pop</span><span class="metric-val">${ev.totalPopulation.toLocaleString()}</span></div>
+      <div class="metric"><span class="metric-label">Residents</span><span class="metric-val">${ev.totalPopulation.toLocaleString()}</span></div>
       <div class="metric"><span class="metric-label">Evacuated</span><span class="metric-val">${evacDisplay}</span></div>
       <div class="metric"><span class="metric-label">Bottlenecks</span><span class="metric-val ${ev.bottlenecks.length ? 'warn' : ''}">${ev.bottlenecks.length}</span></div>
-      <div class="metric"><span class="metric-label">Roads Lost</span><span class="metric-val">${lostDisplay}</span></div>
+      <div class="metric"><span class="metric-label">Roads lost</span><span class="metric-val">${lostDisplay}</span></div>
     `;
   }
 
@@ -149,36 +138,23 @@ export class EvacuationPanel extends Panel {
     if (!zonesEl) return;
     const lrs = ev.lastRunSimMin || 0;
     zonesEl.innerHTML = ev.zones.map(z => {
-      const lvlText = z.level === 3 ? 'LEVEL 3 GO' : z.level === 2 ? 'LEVEL 2 SET' : 'LEVEL 1 READY';
-      const dests = z.route?.destinations
-        ? z.route.destinations.slice(0, 2).map(d => `${d.name} (${d.count})`).join(', ')
-        : null;
-      const bn = z.bottleneck
-        ? `<div class="zone-meta" style="color:var(--accent-warm)">⚠ Bottleneck · ${z.bottleneck.ratio}% cap — enable contraflow on ${this._roads.motorway || 'primary route'}</div>`
-        : '';
+      const lvlText = z.level === 3 ? 'GO' : z.level === 2 ? 'SET' : 'READY';
       const hint = zoneActionHint(z, this._roads);
-      const segCount = z.route?.edgeIds?.length || 0;
-      const altCount = z.route?.secondaryEdgeIds?.length || 0;
-      const segInfo = segCount
-        ? `<span style="color:var(--text-dim);font-size:10px">· ${segCount} seg${altCount ? ` (+${altCount} alt)` : ''}</span>`
-        : '';
-      const destLine = dests
-        ? `<div class="zone-meta" style="color:var(--text-dim)">→ ${dests} ${segInfo}</div>`
-        : `<div class="zone-meta" style="color:var(--accent-hot)">⚠ No route found</div>`;
       const livePct = this._liveEvacuatedPct(z, lrs);
-      const pctLabel = z.level >= 2 && livePct > 0
-        ? `<span style="float:right;color:var(--text-dim);font-size:10px">${livePct}%</span>`
-        : '';
+      const dest = z.route?.destinations?.[0]?.name;
       return `<div class="zone-row l${z.level}">
         <div class="zone-name">
           <span>${z.name}</span>
           <span class="zone-level l${z.level}">${lvlText}</span>
         </div>
-        <div class="zone-meta">Fire ETA ${formatMin(z.etaMin)} · Evac ${formatMin(z.evacMin)} · Margin ${formatMin(z.marginMin)}</div>
-        ${destLine}
-        ${bn}
+        <div class="zone-stats">
+          <div class="zone-stat"><span>Fire ETA</span><span>${formatMin(z.etaMin)}</span></div>
+          <div class="zone-stat"><span>Clear in</span><span>${formatMin(z.evacMin)}</span></div>
+          <div class="zone-stat"><span>Margin</span><span>${formatMin(z.marginMin)}</span></div>
+        </div>
+        ${dest ? `<div class="zone-meta">To ${dest}</div>` : `<div class="zone-meta" style="color:#ff8a80">No route found</div>`}
         ${hint}
-        ${pctLabel}<div class="progress"><div class="progress-fill" style="width:${livePct}%"></div></div>
+        <div class="progress"><div class="progress-fill" style="width:${livePct}%"></div></div>
       </div>`;
     }).join('');
   }
@@ -189,25 +165,23 @@ export class EvacuationPanel extends Panel {
     const usage = ev.shelterUsage || [];
     sheltersEl.innerHTML = usage.map(s => {
       const pct = s.capacity > 0 ? Math.round((s.used / s.capacity) * 100) : 0;
-      return `<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:4px 0">
-        <span>${s.name}</span>
-        <span style="color:var(--text-dim)">${s.used.toLocaleString()}/${s.capacity.toLocaleString()} <span style="color:${pct>85?'var(--accent-hot)':pct>60?'var(--accent-warm)':'var(--accent-good)'}">${pct}%</span></span>
-      </div>`;
-    }).join('') || '<span style="color:var(--text-dim)">No shelters in use</span>';
+      const col = pct > 85 ? 'var(--accent-hot)' : pct > 60 ? 'var(--accent-warm)' : 'var(--text-dim)';
+      return `<div class="list-row"><span>${s.name}</span><span class="num" style="color:${col}">${pct}%</span></div>`;
+    }).join('') || '<div class="list-row"><span style="color:var(--text-dim)">No shelters in use</span></div>';
   }
 
   _renderBottlenecks(ev) {
     const botEl = this.body.querySelector('#ev-bot');
     if (!botEl) return;
     if (!ev.bottlenecks.length) {
-      botEl.innerHTML = '<span style="color:var(--accent-good)">All routes flowing within capacity.</span>';
+      botEl.innerHTML = '<div class="list-row"><span style="color:var(--accent-good)">All routes within capacity</span></div>';
     } else {
       botEl.innerHTML = ev.bottlenecks.slice(0, 4).map(b => {
         const pct = Math.round(b.ratio * 100);
         const roadName = b.name || (b.hwy ? b.hwy.charAt(0).toUpperCase() + b.hwy.slice(1) : `Road ${b.edgeId}`);
         const sev = pct > 150 ? 'var(--accent-hot)' : pct > 110 ? 'var(--accent-warm)' : 'var(--text-dim)';
-        return `<span style="color:${sev}">${roadName} · ${pct}% cap</span>`;
-      }).join('<br>');
+        return `<div class="list-row"><span>${roadName}</span><span class="num" style="color:${sev}">${pct}%</span></div>`;
+      }).join('');
     }
   }
 }
@@ -215,34 +189,25 @@ export class EvacuationPanel extends Panel {
 function formatMin(n) {
   if (!Number.isFinite(n)) return '—';
   if (n >= 999) return '—';
-  if (n < 0) return `<span style="color:var(--accent-hot)">${n}m</span>`;
-  return `${n}m`;
+  const t = (m) => {
+    const a = Math.abs(m);
+    return a >= 120 ? `${Math.round(a / 60)} h` : `${a} min`;
+  };
+  if (n < 0) return `<span class="bad">−${t(n)}</span>`;
+  return t(n);
 }
 
 function zoneActionHint(z, roads = {}) {
-  const s = (cls, text) =>
-    `<div style="font-size:10px;padding:3px 6px;margin-top:3px;border-radius:3px;background:${cls === 'crit' ? 'rgba(255,59,48,0.12)' : cls === 'warn' ? 'rgba(255,149,0,0.12)' : 'rgba(94,234,141,0.08)'};color:${cls === 'crit' ? 'var(--accent-hot)' : cls === 'warn' ? 'var(--accent-warm)' : 'var(--accent-good)'};letter-spacing:0.04em">${text}</div>`;
-
-  const hwy = roads.motorway || roads.trunk || 'primary route';
+  const s = (cls, text) => `<div class="zone-hint ${cls}">${text}</div>`;
+  const hwy = roads.motorway || roads.trunk || 'the main route';
 
   if (!z.route) {
-    if (z.level >= 2) return s('crit', `⚡ NO ROUTE — press M → COMMAND and unblock roads / enable contraflow on ${hwy}`);
-    return s('warn', '⚠ No route computed — press E to run evacuation engine');
+    if (z.level >= 2) return s('crit', `No open route. Reopen roads or run contraflow on ${hwy}`);
+    return '';
   }
-  if (z.marginMin < 0) {
-    return s('crit', '⚡ Fire arrival imminent — maximize contraflow, push remaining evacuees now');
-  }
-  if (z.marginMin < 15 && z.level < 3) {
-    return s('crit', `⚡ Margin critical — click the zone to upgrade to GO`);
-  }
-  if (z.bottleneck && z.bottleneck.ratio > 100) {
-    return s('warn', `→ Route overloaded — enable contraflow on ${hwy} (COMMAND) or block alternates`);
-  }
-  if (z.level < 3 && z.marginMin < 45) {
-    return s('warn', `→ Margin tightening — consider upgrading to LEVEL ${z.level + 1}`);
-  }
-  if (z.level === 3 && (z.evacuatedPct || 0) > 80) {
-    return s('ok', `✓ ${z.evacuatedPct}% clear — monitor for stragglers`);
-  }
+  if (z.marginMin < 0) return s('crit', 'Fire arrives before the zone clears. Push contraflow now');
+  if (z.marginMin < 15 && z.level < 3) return s('crit', 'Margin critical. Raise to GO');
+  if (z.bottleneck && z.bottleneck.ratio > 100) return s('warn', `Route over capacity. Contraflow on ${hwy}`);
+  if (z.level === 3 && (z.evacuatedPct || 0) > 80) return s('ok', `${z.evacuatedPct}% clear`);
   return '';
 }

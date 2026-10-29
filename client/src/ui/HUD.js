@@ -104,7 +104,7 @@ export class HUD {
     this._actionToast = document.createElement('div');
     this._actionToast.id = 'action-toast';
     this._actionToast.className = 'mode-toast hidden';
-    this._actionToast.style.cssText = 'bottom:80px;top:auto;';
+    this._actionToast.style.cssText = 'bottom:84px;top:auto;';
     document.getElementById('hud').appendChild(this._actionToast);
     this._actionToastTimer = null;
 
@@ -114,7 +114,6 @@ export class HUD {
   showActionToast(text, severity = 'info') {
     const colors = { info: 'var(--accent)', warn: 'var(--accent-warm)', crit: 'var(--accent-hot)', ok: 'var(--accent-good)' };
     this._actionToast.textContent = text;
-    this._actionToast.style.borderColor = colors[severity] || colors.info;
     this._actionToast.style.color = colors[severity] || colors.info;
     this._actionToast.classList.remove('hidden');
     clearTimeout(this._actionToastTimer);
@@ -137,16 +136,20 @@ export class HUD {
       const zonePop = (snap.populations || []).filter(p => p.zone === z.name).reduce((s, p) => s + p.count, 0);
       return a + ((z.evacuatedPct || 0) / 100) * zonePop;
     }, 0));
-    const evacPct = total > 0 ? Math.round(evacuated / total * 100) : 0;
+    // Same figure the Evacuation panel shows, so the two never disagree.
+    const panelPct = this.panels?.panels?.evacuation?.lastEvacPct;
+    const evacPct = panelPct != null ? panelPct : (total > 0 ? Math.round(evacuated / total * 100) : 0);
     const worst = ev.zones.slice().sort((a, b) => (a.marginMin ?? 9999) - (b.marginMin ?? 9999))[0];
     const bnCount = ev.bottlenecks?.length || 0;
     const margin = worst?.marginMin;
     const marginCls = margin == null ? '' : margin < 0 ? 'crit' : margin < 15 ? 'warn' : '';
+    const am = Math.abs(margin ?? 0);
+    const marginTxt = margin == null ? '—' : `${margin < 0 ? '−' : '+'}${am >= 120 ? Math.round(am / 60) + ' h' : am + ' min'}`;
     el.innerHTML = `
-      <span>${total.toLocaleString()} residents</span> ·
-      <span class="${evacPct >= 60 ? '' : 'warn'}">${evacPct}% evacuated</span> ·
-      <span>Critical: <span class="${marginCls}">${worst?.name || '—'} ${margin != null ? margin + 'm margin' : ''}</span></span> ·
-      <span class="${bnCount ? 'warn' : ''}">${bnCount} bottlenecks</span>
+      <span class="chip"><span class="chip-k">Residents</span><b>${total.toLocaleString()}</b></span>
+      <span class="chip"><span class="chip-k">Evacuated</span><b>${evacPct}%</b></span>
+      <span class="chip ${marginCls}"><span class="chip-k">Tightest</span><b>${worst?.name || '—'} ${marginTxt}</b></span>
+      <span class="chip ${bnCount ? 'warn' : ''}"><span class="chip-k">Bottlenecks</span><b>${bnCount}</b></span>
     `;
 
     const hintEl = document.getElementById('evac-banner-hint');
@@ -155,9 +158,9 @@ export class HUD {
 
   showModeToast(mode) {
     const descriptions = {
-      MONITOR:  'Monitor Mode — observation only',
-      COMMAND:  'Command Mode — click roads to block/unblock',
-      EVACUATE: 'Evacuation Mode — click zones to upgrade READY → SET → GO'
+      MONITOR:  'Monitor mode',
+      COMMAND:  'Command mode · click a road to block or reopen it',
+      EVACUATE: 'Evacuation mode · click a zone to raise its level'
     };
     const colors = {
       MONITOR:  'var(--accent)',
@@ -165,8 +168,7 @@ export class HUD {
       EVACUATE: 'var(--accent-hot)'
     };
     this._modeToast.textContent = descriptions[mode] || mode;
-    this._modeToast.style.borderColor = colors[mode] || 'var(--accent)';
-    this._modeToast.style.color = colors[mode] || 'var(--accent)';
+    this._modeToast.style.color = 'var(--text)';
     this._modeToast.classList.remove('hidden');
     clearTimeout(this._modeToastTimer);
     this._modeToastTimer = setTimeout(() => this._modeToast.classList.add('hidden'), 2500);
@@ -187,18 +189,18 @@ export class HUD {
   setSimRunning(running) {
     const btn = document.getElementById('btn-pause');
     if (!btn) return;
-    btn.innerHTML = running
-      ? '<kbd>P</kbd> Pause'
-      : '<kbd>P</kbd> Resume';
+    btn.textContent = running ? 'Pause' : 'Resume';
     btn.classList.toggle('paused', !running);
   }
 
   setMode(mode) {
+    const changed = this._lastMode !== undefined && this._lastMode !== mode;
+    this._lastMode = mode;
     this.modeLabel.textContent = mode;
     this.modeLabel.style.color = mode === 'COMMAND' ? 'var(--accent-warm)'
-                              : mode === 'EVACUATE' ? 'var(--accent-hot)'
+                              : mode === 'EVACUATE' ? '#ff8a80'
                               : 'var(--accent)';
-    this.showModeToast(mode);
+    if (changed) this.showModeToast(mode);
   }
 
   cycleMode() {
@@ -235,7 +237,7 @@ export class HUD {
     const mph = Math.round(w.windKph * 0.621371);
     const from = _cardinal(w.windDeg);
     const toward = _windLabel(w.windDeg);
-    el.textContent = `${from}→${toward} ${mph} mph`;
+    el.textContent = `${mph} mph ${from}`;
     el.title = `Wind from ${from} at ${mph} mph · fire moving ${toward}`;
     el.style.color = w.redFlag ? 'var(--accent-hot)' : 'var(--accent)';
   }

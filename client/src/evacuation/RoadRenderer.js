@@ -32,10 +32,10 @@ export class RoadRenderer {
     const positions = [];
     const colors = [];
     const widths = [];
-    const baseColor = new THREE.Color(0xa8c0d8);
-    const hwyColor = new THREE.Color(0xcfe6ff);
-    const trunkColor = new THREE.Color(0xb4d4ee);
-    const arterialColor = new THREE.Color(0x90b0c8);
+    const baseColor = new THREE.Color(0x56677a);
+    const hwyColor = new THREE.Color(0xe2ecf7);
+    const trunkColor = new THREE.Color(0xb8c9db);
+    const arterialColor = new THREE.Color(0x8496aa);
 
     this._edgeMeta = new Map();      // edgeId -> { startIndex, count, hwy }
 
@@ -101,9 +101,9 @@ export class RoadRenderer {
       const curve = new THREE.CatmullRomCurve3(points);
       const tubeGeom = new THREE.TubeGeometry(curve, 8, 0.012, 6, false);
       const tubeMat = new THREE.MeshBasicMaterial({
-        color: 0xe8f4ff,
+        color: 0xe8f0f8,
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.45,
         depthWrite: false
       });
       const tube = new THREE.Mesh(tubeGeom, tubeMat);

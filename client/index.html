@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Marshal Management — AR Fire Command</title>
+    <title>Marshal Management — Wildfire Incident Command</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/ui/styles.css" />
     <script>
       (function () {
@@ -34,50 +37,52 @@
 
       <div id="hud">
         <div id="hud-top-left">
+        <div class="topbar">
           <div class="brand">
-            <span class="brand-mark">▲</span>
-            <span class="brand-text">MARSHAL MANAGEMENT</span>
+            <span class="brand-mark"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1.5 14.5 13.5h-13z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 6.2c1.2 1.4 1.8 2.4 1.8 3.3a1.8 1.8 0 0 1-3.6 0c0-.9.6-1.9 1.8-3.3z" fill="currentColor"/></svg></span>
+            <span class="brand-text">Marshal</span>
             <span class="brand-sub">Wildfire Incident Command</span>
           </div>
           <div id="status-bar">
-            <span class="status-dot" id="conn-dot"></span>
-            <span id="conn-label">connecting…</span>
-            <span class="sep">·</span>
-            <span id="mode-label">MONITOR</span>
-            <span class="sep">·</span>
-            <span id="time-label">T+00:00</span>
-            <span class="sep">·</span>
-            <span id="wind-status" title="Live wind: speed and direction" style="color:var(--accent);letter-spacing:0.06em">— mph</span>
+            <span class="chip"><span class="status-dot" id="conn-dot"></span><span id="conn-label">connecting…</span></span>
+            <span class="chip chip-mode"><span id="mode-label">MONITOR</span></span>
+            <span class="chip"><span class="chip-k">Sim</span><span id="time-label" class="num">T+00:00</span></span>
+            <span class="chip"><span class="chip-k">Wind</span><span id="wind-status" class="num" title="Live wind: speed and direction">—</span></span>
           </div>
         </div>
+      </div>
 
-        <div id="hud-top-right">
-          <button class="hud-btn" id="btn-xr" title="Enter immersive AR (Quest 3)">
-            <span class="hud-btn-key">XR</span>
-            <span>Enter AR</span>
-          </button>
-          <button class="hud-btn" id="btn-help" title="Show keyboard shortcuts">
-            <span class="hud-btn-key">?</span>
-            <span>Controls</span>
-          </button>
-        </div>
+      <div id="hud-top-right">
+        <button class="hud-btn" id="btn-xr" title="Enter immersive AR (Quest 3)">
+          <span class="hud-btn-key">AR</span>
+          <span>Enter AR</span>
+        </button>
+        <button class="hud-btn hud-btn-icon" id="btn-help" title="Show keyboard shortcuts">?</button>
+      </div>
 
-        <div id="hud-bottom">
-          <div class="control-strip">
-            <button class="ctl ctl-panel" data-panel="weather"><kbd>1</kbd> Weather</button>
-            <button class="ctl ctl-panel" data-panel="evacuation"><kbd>2</kbd> Evac</button>
-            <button class="ctl ctl-panel" data-panel="advisor"><kbd>3</kbd> AI</button>
-            <button class="ctl ctl-panel" data-panel="video"><kbd>4</kbd> Video</button>
-            <span class="ctl-sep"></span>
-            <button class="ctl ctl-mode" id="btn-mode"><kbd>M</kbd> Mode</button>
-            <button class="ctl ctl-evacuate" id="btn-evacuate"><kbd>E</kbd> EVACUATE</button>
-            <button class="ctl ctl-time" id="btn-time-back" title="Rewind 30 min (Shift = 60)"><kbd>[</kbd> −30m</button>
-            <button class="ctl ctl-time" id="btn-time-fwd" title="Advance 30 min (Shift = 60)"><kbd>]</kbd> +30m</button>
-            <button class="ctl ctl-pause" id="btn-pause" title="Pause / resume simulation"><kbd>P</kbd> Pause</button>
-            <select class="ctl ctl-scenario" id="scenario-picker" title="Choose a demo scenario"></select>
-            <button class="ctl ctl-reset" id="btn-reset"><kbd>R</kbd> Reset</button>
+      <div id="hud-bottom">
+        <div class="control-strip">
+          <div class="ctl-group">
+            <button class="ctl ctl-panel" data-panel="weather" title="Weather (1)">Weather</button>
+            <button class="ctl ctl-panel" data-panel="evacuation" title="Evacuation (2)">Evacuation</button>
+            <button class="ctl ctl-panel" data-panel="advisor" title="Advisor (3)">Advisor</button>
+            <button class="ctl ctl-panel" data-panel="video" title="Video (4)">Video</button>
           </div>
+          <span class="ctl-sep"></span>
+          <div class="ctl-group">
+            <button class="ctl ctl-time" id="btn-time-back" title="Rewind 30 min ([, Shift = 60)">−30m</button>
+            <button class="ctl ctl-pause" id="btn-pause" title="Pause / resume simulation (P)">Pause</button>
+            <button class="ctl ctl-time" id="btn-time-fwd" title="Advance 30 min (], Shift = 60)">+30m</button>
+          </div>
+          <span class="ctl-sep"></span>
+          <div class="ctl-group">
+            <button class="ctl ctl-mode" id="btn-mode" title="Cycle mode (M)">Mode</button>
+            <select class="ctl ctl-scenario" id="scenario-picker" title="Choose a scenario"></select>
+            <button class="ctl ctl-reset" id="btn-reset" title="Reset (R)">Reset</button>
+          </div>
+          <button class="ctl ctl-evacuate" id="btn-evacuate" title="Run evacuation (E)">Evacuate</button>
         </div>
+      </div>
 
         <div id="panels-layer"></div>
 
@@ -130,9 +135,9 @@
 
         <div id="evac-banner" class="hidden">
           <div class="evac-banner-inner">
-            <div class="evac-banner-title">EVACUATION ACTIVE</div>
+            <div class="evac-banner-title"><span class="live-dot"></span>Evacuation active</div>
             <div class="evac-banner-stats" id="evac-banner-stats">—</div>
-            <div class="evac-banner-hint" id="evac-banner-hint">Click a zone polygon to cycle its level · switch to COMMAND (M) to block roads</div>
+            <div class="evac-banner-hint" id="evac-banner-hint"></div>
           </div>
         </div>
 

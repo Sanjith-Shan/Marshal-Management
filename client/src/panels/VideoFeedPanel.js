@@ -12,7 +12,7 @@ const FEEDS = [
 
 export class VideoFeedPanel extends Panel {
   constructor(layer, position) {
-    super(layer, 'VIDEO FEEDS · LIVE', position);
+    super(layer, 'Video feeds', position);
     this.tiles = [];
     this.body.innerHTML = `<div class="video-grid" id="vid-grid"></div>`;
     const grid = this.body.querySelector('#vid-grid');

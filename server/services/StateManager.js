@@ -16,7 +16,7 @@ export class StateManager extends EventEmitter {
     this.panels = {
       weather: false,
       evacuation: false,
-      advisor: true,
+      advisor: false,
       video: false
     };
     this.weather = {

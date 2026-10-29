@@ -38,44 +38,50 @@ const FRAG = /* glsl */ `
   void main() {
     vec2 uv = vUv;
     vec4 s = texture2D(uState, uv);
-    float burning = step(0.4, s.r) * (1.0 - step(0.7, s.r));   // approx 0.5 channel
-    float burned  = step(0.7, s.r);
-
-    // Sample neighborhood to create soft halo around burning fronts
-    float halo = 0.0;
-    float k = 1.5 / 128.0;
-    for (int yi = -1; yi <= 1; yi++) {
-      for (int xi = -1; xi <= 1; xi++) {
-        vec2 o = vec2(float(xi), float(yi)) * k;
-        vec4 sn = texture2D(uState, uv + o);
-        halo += step(0.4, sn.r) * (1.0 - step(0.7, sn.r));
-      }
+    // R = burning, G = burned; linear filtering turns the cell grid into
+    // smooth fields, smoothstep turns those into clean soft-edged shapes.
+    // Average the front over a one-cell disc first so the sparse cellular
+    // front reads as a continuous line instead of speckle.
+    float k1 = 1.0 / 128.0;
+    float fr = s.r * 0.28;
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.7854;
+      fr += texture2D(uState, uv + vec2(cos(a), sin(a)) * k1).r * 0.09;
     }
-    halo /= 9.0;
+    float front  = smoothstep(0.24, 0.62, fr);
+    float core   = smoothstep(0.55, 0.95, fr);
+    float burned = smoothstep(0.30, 0.70, s.g);
 
-    float flicker = 0.85 + 0.4 * noise(uv * 90.0 + uTime * 4.0);
-
-    vec3 fireColor = mix(vec3(1.0, 0.45, 0.10), vec3(1.0, 0.85, 0.25), 0.5 + 0.5 * sin(uTime * 7.0 + uv.x * 30.0));
-    vec3 burntColor = vec3(0.10, 0.07, 0.05);
-
-    vec3 col = vec3(0.0);
-    float alpha = 0.0;
-
-    if (burned > 0.5) {
-      col = burntColor;
-      alpha = 0.8;
+    // Wide soft glow around the active front.
+    float glow = 0.0;
+    float k = 2.4 / 128.0;
+    for (int i = 0; i < 12; i++) {
+      float a = float(i) * 0.5236;
+      glow += texture2D(uState, uv + vec2(cos(a), sin(a)) * k).r;
+      glow += texture2D(uState, uv + vec2(cos(a + 0.26), sin(a + 0.26)) * k * 2.0).r * 0.6;
     }
-    if (burning > 0.5) {
-      col = fireColor * flicker;
-      alpha = 0.9;
-    } else if (halo > 0.05) {
-      col = mix(col, fireColor, halo);
-      alpha = max(alpha, halo * 0.55);
-    }
+    glow = clamp(glow / 10.0, 0.0, 1.0);
+
+    float n = noise(uv * 70.0 + vec2(uTime * 0.35, -uTime * 0.25));
+    float flicker = 0.92 + 0.14 * n;
+    vec3 ember = vec3(0.95, 0.24, 0.06);
+    vec3 warm  = vec3(1.0, 0.48, 0.12);
+    vec3 hot   = vec3(1.0, 0.76, 0.38);
+    vec3 fireColor = mix(warm, hot, core) * flicker;
+    vec3 burntColor = vec3(0.07, 0.058, 0.052) * (0.9 + 0.2 * noise(uv * 220.0));
+
+    vec3 col = burntColor;
+    float alpha = burned * 0.84;
+
+    float haloA = glow * (1.0 - front) * 0.42;
+    col = mix(col, ember, clamp(haloA / max(alpha + haloA, 0.001), 0.0, 1.0));
+    alpha = max(alpha, haloA);
+
+    col = mix(col, fireColor, front);
+    alpha = max(alpha, front * 0.96);
 
     alpha *= uFade;
-    if (alpha < 0.015) discard;
-
+    if (alpha < 0.01) discard;
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -126,7 +132,7 @@ export class FireOverlay {
       transparent: true,
       depthWrite: false,
       side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending
+      blending: THREE.NormalBlending
     });
 
     this.mesh = new THREE.Mesh(geom, this.material);
@@ -147,12 +153,9 @@ export class FireOverlay {
     const data = this.data;
     for (let i = 0; i < state.length; i++) {
       const v = state[i];
-      const r = v === FIRE_STATE.STATE_BURNING ? 128
-              : v === FIRE_STATE.STATE_BURNED ? 220
-              : 0;
       const o = i * 4;
-      data[o + 0] = r;
-      data[o + 1] = 0;
+      data[o + 0] = v === FIRE_STATE.STATE_BURNING ? 255 : 0;
+      data[o + 1] = v === FIRE_STATE.STATE_BURNED ? 255 : 0;
       data[o + 2] = 0;
       data[o + 3] = 255;
     }

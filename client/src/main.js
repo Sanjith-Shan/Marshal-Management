@@ -286,11 +286,16 @@ class App {
       const span = xrBtn.querySelector('span:last-child');
       if (span) span.textContent = 'Exit AR'; else xrBtn.textContent = 'Exit AR';
       xrBtn.classList.add('active');
+      // Orientation aids matter in the headset; the desktop view hides them.
+      if (this.compass) this.compass.group.visible = true;
+      if (this.windInd) this.windInd.group.visible = true;
     });
     this.ar.on('exit', () => {
       const span = xrBtn.querySelector('span:last-child');
       if (span) span.textContent = 'Enter AR'; else xrBtn.textContent = 'Enter AR';
       xrBtn.classList.remove('active');
+      if (this.compass) this.compass.group.visible = false;
+      if (this.windInd) this.windInd.group.visible = false;
     });
 
     this.canvas.addEventListener('click', (ev) => this._handleCanvasClick(ev));
@@ -379,12 +384,14 @@ class App {
     sg.add(this.proactive.group);
 
     this.compass = new CompassMarkers();
+    this.compass.group.visible = false;   // desktop view stays clean; AR re-enables
     sg.add(this.compass.group);
 
     this.perimeter = new PerimeterOverlay(this.scenario, this.terrain);
     sg.add(this.perimeter.group);
 
     this.windInd = new WindIndicator();
+    this.windInd.group.visible = false;
     sg.add(this.windInd.group);
     if (this.snapshot?.weather) {
       this.windInd.setWind(this.snapshot.weather.windDeg, this.snapshot.weather.windKph, this.snapshot.weather.redFlag);

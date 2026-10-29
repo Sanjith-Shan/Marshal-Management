@@ -7,6 +7,7 @@
 // a solid reference even when particles are too small to see.
 
 import * as THREE from 'three';
+import { dotTexture } from '../utils/dotTexture.js';
 import { chainPolyline, bfsPolyline, orientPolyline } from './_polyline.js';
 
 const PARTICLES_PER_ROUTE = 40;
@@ -110,6 +111,7 @@ export class RouteAnimator {
       const mat = new THREE.PointsMaterial({
         color,
         size:    this._evacMode ? baseSize * 1.5 : baseSize,
+        map: dotTexture(),
         transparent: true,
         opacity: 0,
         depthWrite: false,

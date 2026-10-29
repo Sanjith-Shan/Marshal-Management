@@ -49,9 +49,9 @@ export class SceneRoot {
     this.camera.lookAt(0, 0, 0);
 
     // Lights
-    const hemi = new THREE.HemisphereLight(0xa8c8ff, 0x1a1410, 0.45);
+    const hemi = new THREE.HemisphereLight(0xc8d8ff, 0x1a1612, 0.65);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffe4b8, 1.1);
+    const sun = new THREE.DirectionalLight(0xfff0dc, 1.15);
     sun.position.set(6, 12, 4);
     this.scene.add(sun);
     const rim = new THREE.DirectionalLight(0x6cb8ff, 0.35);
@@ -65,25 +65,27 @@ export class SceneRoot {
     this.terrainGroup.scale.setScalar(1);     // we render in scene units; 1 unit ≈ 1 m
     this.scene.add(this.terrainGroup);
 
-    // A subtle "table" disk under the terrain in desktop mode
+    // Soft contact shadow under the relief model (desktop only).
+    const sc = document.createElement('canvas');
+    sc.width = sc.height = 256;
+    const sctx = sc.getContext('2d');
+    const sg = sctx.createRadialGradient(128, 128, 20, 128, 128, 128);
+    sg.addColorStop(0, 'rgba(0,0,0,0.75)');
+    sg.addColorStop(0.55, 'rgba(0,0,0,0.35)');
+    sg.addColorStop(1, 'rgba(0,0,0,0)');
+    sctx.fillStyle = sg;
+    sctx.fillRect(0, 0, 256, 256);
     this.table = new THREE.Mesh(
-      new THREE.CircleGeometry(8, 64),
-      new THREE.MeshStandardMaterial({
-        color: 0x0a0e16, roughness: 0.95, metalness: 0.0
-      })
+      new THREE.PlaneGeometry(22, 22),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc), transparent: true, depthWrite: false })
     );
     this.table.rotation.x = -Math.PI / 2;
-    this.table.position.y = -0.02;
+    this.table.position.y = -0.36;
     this.scene.add(this.table);
 
-    // Faint grid for orientation. Stored so AR mode can hide it — at scene
-    // scale (1 unit = 1 m) the 16-unit grid is a 16 m square that dominates
-    // the passthrough room and reads as "the big grid with nothing on it."
+    // Kept for AR code paths that toggle it; never shown on desktop.
     this.grid = new THREE.GridHelper(16, 16, 0x1a3a5a, 0x0a1a2a);
-    this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.35;
-    this.grid.position.y = -0.015;
-    this.scene.add(this.grid);
+    this.grid.visible = false;
 
     this.clock = new THREE.Clock();
 
@@ -109,12 +111,13 @@ export class SceneRoot {
       this.grid.visible = false;
     } else {
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      this.renderer.toneMappingExposure = 1.05;
-      this.scene.background = new THREE.Color('#070a10');
-      this.scene.fog = new THREE.Fog('#070a10', 18, 50);
-      this.renderer.setClearColor(0x070a10, 1);
+      this.renderer.toneMappingExposure = 1.1;
+      // Transparent clear: the page's CSS gradient is the backdrop.
+      this.scene.background = null;
+      this.scene.fog = new THREE.Fog('#0b1018', 26, 60);
+      this.renderer.setClearColor(0x000000, 0);
       this.table.visible = true;
-      this.grid.visible = true;
+      this.grid.visible = false;
     }
   }
 

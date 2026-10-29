@@ -53,7 +53,7 @@ export class Keybindings {
         // Toggle the historical fire perimeter overlay (NIFC 2003 Cedar etc.)
         if (window.app?.perimeter) {
           const visible = window.app.perimeter.toggle();
-          this.hud.showModeToast(visible ? 'Footprint: 2003 Cedar Fire (NIFC) ON' : 'Footprint: OFF');
+          this.hud.showModeToast(visible ? 'Showing the real 2003 Cedar Fire perimeter (NIFC)' : 'Historical perimeter hidden');
         }
         break;
       case 'BracketRight':
