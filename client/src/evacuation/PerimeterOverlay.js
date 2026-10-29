@@ -9,7 +9,7 @@ import * as THREE from 'three';
 
 const FILL_COLOR    = 0xff5544;   // historical-burn red
 const OUTLINE_COLOR = 0xffaa66;
-const FILL_OPACITY  = 0.18;
+const FILL_OPACITY  = 0.3;
 const LIFT          = 0.06;       // above terrain to avoid z-fighting
 
 export class PerimeterOverlay {
@@ -47,8 +47,12 @@ export class PerimeterOverlay {
       const fillGeom = new THREE.ShapeGeometry(shape);
       // ShapeGeometry produces XY plane; rotate to XZ.
       fillGeom.rotateX(Math.PI / 2);
-      // Lift to avoid z-fighting with terrain.
-      fillGeom.translate(0, LIFT, 0);
+      // Drape each vertex onto the terrain so the fill is not buried under ridges.
+      const pos = fillGeom.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        pos.setY(i, this.terrain.worldHeightAt(pos.getX(i), pos.getZ(i)) + LIFT);
+      }
+      pos.needsUpdate = true;
 
       const fill = new THREE.Mesh(
         fillGeom,
@@ -57,6 +61,7 @@ export class PerimeterOverlay {
           transparent: true,
           opacity: FILL_OPACITY,
           depthWrite: false,
+          depthTest: false,
           side: THREE.DoubleSide,
         })
       );
@@ -73,8 +78,9 @@ export class PerimeterOverlay {
         new THREE.LineBasicMaterial({
           color: OUTLINE_COLOR,
           transparent: true,
-          opacity: 0.85,
+          opacity: 1.0,
           depthWrite: false,
+          depthTest: false,
         })
       );
       outline.renderOrder = 8;
